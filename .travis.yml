@@ -11,7 +11,7 @@ script: tox
 
 deploy:
   provider: pypi
-  server: https://test.pypi.org/
+  server: https://test.pypi.org/legacy/
   distributions: sdist bdist_wheel
   username: __token__
   password:
