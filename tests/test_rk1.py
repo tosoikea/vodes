@@ -20,6 +20,21 @@ def test_rk1_f1():
     
     assert actual == expected
 
+def test_rk1_f1_c():
+    f = lambda t,y : 3j * y
+    l = vodes.runge.RK1(f, 1, (0,3), {"dt":1})
+    l.calculate()
+
+    actual = l.solution
+    expected = [
+        (0, 1), 
+        (1, (1+3j)), 
+        (2, (-8+6j)), 
+        (3, (-26-18j))
+    ]
+    
+    assert actual == expected
+
 def test_rk1_v1():
     f = lambda t,y : 3 * y
     l = vodes.runge.RK1(f, 1, (0,3), {"dt":0.5})

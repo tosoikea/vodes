@@ -23,12 +23,12 @@ handlers:
     encoding: utf8
 
 root:
-    level: NOTSET
+    level: INFO
     handlers: [console]
     propagate: yes
 
 loggers:
   vodes:
-    level: DEBUG
+    level: INFO
     handlers: [error_file_handler, console]
     propagate: no

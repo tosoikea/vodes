@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 import logging
 import matplotlib.pyplot
 
+#
+import numpy
+
 class Solver(ABC):
     def __init__(self, problem, y0, interval, opt = None):
         self.problem = problem
@@ -34,7 +37,9 @@ class Solver(ABC):
 
     def calculate(self):
         if len(self.solution) != 0:
-            return
+            self.solution = []
+            self.steps = []
+            self.validate()
 
         # initial value
         self.solution.append((self.interval[0], self.y0))
@@ -51,25 +56,34 @@ class Solver(ABC):
         if len(self.solution) == 0:
             return
 
-        x = []
+        ax = []
         ay = []
+        ex = []
         ey = []
 
         for i in range(0,len(self.solution)):
-            x.append(self.solution[i][0])
+            ax.append(self.solution[i][0])
             ay.append(self.solution[i][1])
 
-            if exact is None:
-                continue
+        for t in numpy.arange(self.interval[0],self.interval[1]+0.001,0.01):
+            ex.append(t)
+            ey.append(exact(t))
 
-            ey.append(exact(x[-1]))
+        if not(exact is None):
+            matplotlib.pyplot.plot(ex, ey)
+        matplotlib.pyplot.plot(ax, ay)
 
-        if len(ey) == 0:
-            matplotlib.pyplot.plot(x, ay)
-        else:
-            matplotlib.pyplot.plot(x, ay, x, ey)
         matplotlib.pyplot.show()
 
+    # Global error as (absolute) maximum difference between exact and approximated values
+    def error(self, exact):
+        error = 0
 
+        for i in range(0,len(self.solution)):
+            res = exact(self.solution[i][0])
+            dif = abs(self.solution[i][1] - res)
+            error = max(dif,error)
+
+        return error
         
         

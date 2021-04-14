@@ -20,4 +20,4 @@ with open(os.path.join(__location__, 'logging.yml'), 'r') as f:
 
 logger = logging.getLogger(__name__)
 
-logging.info('Package successfully loaded.')
+logging.debug('Package successfully loaded.')
