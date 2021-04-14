@@ -29,6 +29,6 @@ root:
 
 loggers:
   vodes:
-    level: INFO
+    level: DEBUG
     handlers: [error_file_handler, console]
     propagate: no
