@@ -3,12 +3,22 @@
 """Tests for `vodes` package."""
 
 import pytest
-import vodes.runge
+from vodes import runge
 import math
+from sympy import symbols
+from sympy.functions import exp
+
+# define functions
+y = symbols('y')
+t = symbols('t')
+
+f1 = 3 * y
+f1_c = 3j * y
+f2 = t * y + t
+
 
 def test_rk2_f1():
-    f = lambda t,y : 3 * y
-    l = vodes.runge.RK2(f, 1, (0,3), {"dt":1})
+    l = runge.RK2(f1, 1, (0,3), {"dt":1}, symbols=[y])
     l.calculate()
 
     actual = l.solution
@@ -22,8 +32,7 @@ def test_rk2_f1():
     assert actual == expected
 
 def test_rk2_v1():
-    f = lambda t,y : 3 * y
-    l = vodes.runge.RK2(f, 1, (0,3), {"dt":0.5})
+    l = runge.RK2(f1, 1, (0,3), {"dt":0.5}, symbols=[y])
     l.calculate()
 
     actual = l.solution
@@ -41,8 +50,7 @@ def test_rk2_v1():
     assert all([a[0] == b[0] and math.isclose(a[1],b[1],rel_tol=0.05) for a, b in zip(actual, expected)])
 
 def test_rk2_f2():
-    f = lambda t,y : t * y + t
-    l = vodes.runge.RK2(f, 1, (0,5), {"dt":1})
+    l = runge.RK2(f2, 1, (0,5), {"dt":1}, symbols=[y, t])
     l.calculate()
 
     actual = l.solution
@@ -58,8 +66,7 @@ def test_rk2_f2():
     assert actual == expected
 
 def test_rk2_v2():
-    f = lambda t,y : t * y + t
-    l = vodes.runge.RK2(f, 1, (0,3), {"dt":0.5})
+    l = runge.RK2(f2, 1, (0,3), {"dt":0.5}, symbols=[y, t])
     l.calculate()
 
     actual = l.solution

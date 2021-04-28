@@ -3,15 +3,22 @@ import sys
 sys.path.append('../vodes')
 #
 
-import vodes
-import vodes.runge
-import math
+from vodes import runge
 import matplotlib.pyplot
+
+from sympy import symbols
+from sympy.functions import exp
 
 iv = 1
 c = 3.0
-f = lambda t,y : c * y
-e = lambda t : math.exp(c * t) * iv
+
+# define function
+t = symbols('t')
+y = symbols('y')
+f = c * y
+
+# exact solution
+e = exp(c * t) * iv
 
 # visualize
 steps = []
@@ -21,8 +28,8 @@ error_r2 = []
 for i in range(0,8):
     step = 10 ** -i
     print(step)
-    lr1 = vodes.runge.RK1(f, iv, (0,1), {"dt":step})
-    lr2 = vodes.runge.RK2(f, iv, (0,1), {"dt":step})
+    lr1 = runge.RK1(f, iv, (0,1), {"dt":step}, symbols=[y, t])
+    lr2 = runge.RK2(f, iv, (0,1), {"dt":step}, symbols=[y, t])
 
     lr1.calculate()
     lr2.calculate()

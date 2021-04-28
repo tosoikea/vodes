@@ -22,11 +22,11 @@ class RK(Solver,ABC):
 
 class RK1(RK):
     def step(self, t, y):
-        k1 = self.problem(t,y)
+        k1 = self._eval(t,y)
         return y + self.dt * k1 
 
 class RK2(RK):
     def step(self, t, y):
-        k1 = self.problem(t,y)
-        k2 = self.problem(t + self.dt, y + self.dt * k1)
+        k1 = self._eval(t,y)
+        k2 = self._eval(t + self.dt, y + self.dt * k1)
         return y + self.dt / 2 * (k1 + k2)

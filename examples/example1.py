@@ -3,19 +3,21 @@ import sys
 sys.path.append('../vodes')
 #
 
-import vodes
-import vodes.runge
-import math
+from vodes import runge
+from sympy import *
 
-iv = 1
+iv = frac(Rational(1,2))
 c = 1.0
-f = lambda t,y : c * y
-e = lambda t : math.exp(c * t) * iv
 
-lr1 = vodes.runge.RK1(f, iv, (0,1), {"dt":0.5})
+# define function
+t = symbols('t')
+y = symbols('y')
+f = -4 * y
+
+lr1 = runge.RK1(f, iv, (0,5), {"dt":0.1}, symbols=[y, t])
 lr1.calculate()
-lr1.show(exact=e)
+lr1.show()
 
-lr2 = vodes.runge.RK2(f, iv, (0,1), {"dt":0.001})
+lr2 = runge.RK2(f, iv, (0,5), {"dt":0.001}, symbols=[y, t])
 lr2.calculate()
-lr2.show(exact=e)
+lr2.show()
