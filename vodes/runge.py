@@ -30,3 +30,11 @@ class RK2(RK):
         k1 = self._eval(t,y)
         k2 = self._eval(t + self.dt, y + self.dt * k1)
         return y + self.dt / 2 * (k1 + k2)
+
+class RK4(RK):
+    def step(self, t, y):
+        k1 = self._eval(t, y)
+        k2 = self._eval(t + self.dt / 2, y + self.dt / 2 * k1) 
+        k3 = self._eval(t + self.dt / 2, y + self.dt / 2 * k2) 
+        k4 = self._eval(t + self.dt, y + self.dt * k3)
+        return y + self.dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
