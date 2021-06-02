@@ -3,7 +3,7 @@
 """Tests for `vodes` package."""
 
 import pytest
-from vodes import runge
+from vodes.ode import runge
 import math
 from sympy import symbols
 from sympy.functions import exp

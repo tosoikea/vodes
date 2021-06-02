@@ -3,7 +3,7 @@
 """Tests for `vodes` package."""
 
 import pytest
-from vodes import runge
+from vodes.ode import runge
 from sympy import symbols
 from sympy.functions import exp
 
@@ -40,8 +40,11 @@ def test_rk1_f1_c():
         (2, (-8+6j)), 
         (3, (-26-18j))
     ]
+
+    cactual = [(t,complex(y)) for (t,y) in actual]
+    cexpected = [(t,complex(y)) for (t,y) in expected]
     
-    assert actual == expected
+    assert cactual == cexpected
 
 def test_rk1_v1():
     l = runge.RK1(f1, 1, (0,3), {"dt":0.5}, symbols=[y])

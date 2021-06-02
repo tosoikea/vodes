@@ -4,20 +4,23 @@ import matplotlib.pyplot
 
 #
 from numpy.core.function_base import linspace
-from sympy.core.symbol import symbols
-from sympy.utilities.lambdify import lambdify
+from sympy import symbols, Float, lambdify
+from mpmath import mp
 
 class Solver(ABC):
     def __init__(self, problem, y0, interval, opt = None, symbols = None):
         self.problem = problem
+        ## Precision of floating point calculation
+        self.precision = 1
 
         # problems are dependent on time and itself
         # TODO : Move Problem into separate class
         self.__internal_symbols = [] if symbols is None else symbols
-        self.__internal_problem = lambdify(self.__internal_symbols, self.problem)
+        self.__internal_problem = lambdify(self.__internal_symbols, self.problem, "mpmath")
 
-        self.y0 = y0
         self.interval = interval
+        # 
+        self.y0 = y0
         self.solution = []
 
         # optional arguments parsed by the implementing solvers
@@ -39,7 +42,18 @@ class Solver(ABC):
         if len(self.__internal_symbols) > 2:
             exit(-1)
 
+    def _symbolic_eval(self, t, y):
+        # TODO : not working correctly, seems to be ignored
+        if len(self.__internal_symbols) == 0:
+            return self.problem.evalf(self.prec)
+        elif len(self.__internal_symbols) == 1:
+            return self.problem.evalf(self.prec, subs={self.__internal_symbols[0]: y})
+        else:
+            return self.problem.evalf(self.prec, subs={self.__internal_symbols[0]: y, self.__internal_symbols[1] : t})
+
+    ## way more efficient than _symbolic_eval
     def _eval(self, t, y):
+        mp.prec = self.precision
         if len(self.__internal_symbols) == 0:
             return self.__internal_problem()
         elif len(self.__internal_symbols) == 1:
@@ -61,13 +75,13 @@ class Solver(ABC):
             self.steps = []
             self.validate()
 
-        # initial value
-        self.solution.append((self.interval[0], self.y0))
+        # initial values
+        self.solution.append((Float(self.interval[0], self.precision), Float(self.y0, self.precision)))
         self.logger.debug('Starting calculate with %f at %d',self.solution[0][1], self.solution[0][0])
 
         while len(self.steps) > 0:
-            t = self.steps.pop(0)
-            y = self.solution[-1][1]
+            t = self.steps.pop(0), self.precision
+            y = self.solution[-1][1], self.precision
 
             res = self.step(self.solution[-1][0],y)
             self.store(t, res)

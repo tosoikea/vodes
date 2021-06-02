@@ -1,4 +1,4 @@
-from vodes.solver import Solver
+from vodes.ode.solver import Solver
 from abc import ABC, abstractmethod
 
 class RK(Solver,ABC):

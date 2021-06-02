@@ -3,7 +3,7 @@ import sys
 sys.path.append('../vodes')
 #
 
-from vodes import runge
+from vodes.ode import runge
 import matplotlib.pyplot
 
 from sympy import symbols
@@ -26,7 +26,7 @@ error_r1 = []
 error_r2 = []
 error_r3 = []
 
-for i in range(0,8):
+for i in range(0,6):
     step = 10 ** -i
     print(step)
     lr1 = runge.RK1(f, iv, (0,1), {"dt":step}, symbols=[y, t])

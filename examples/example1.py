@@ -3,7 +3,7 @@ import sys
 sys.path.append('../vodes')
 #
 
-from vodes import runge
+from vodes.ode import runge
 from sympy import *
 
 iv = frac(Rational(1,2))
