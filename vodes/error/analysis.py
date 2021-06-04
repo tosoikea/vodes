@@ -6,5 +6,5 @@ class Analysis(ABC):
         self._problem = problem
 
     @abstractmethod
-    def absolute(self):
+    def absolute(self, subs):
         pass
