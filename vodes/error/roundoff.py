@@ -1,5 +1,7 @@
 from numpy.lib.arraysetops import isin
+from sympy.core import expr
 from vodes.error.analysis import Analysis
+from vodes.error.node import Node
 from abc import ABC, abstractmethod
 from functools import reduce
 # symbols, diff
@@ -21,26 +23,83 @@ class Roundoff(Analysis,ABC):
         self._machine_epsilon = symbols("e", real=True, positive=True)
 
         self._affine = self._inject(self._problem)
-        print("AFFINE : " + str(self._affine))
+        print("AFFINE : ")
+        pprint(self._affine)
+
         self._approx = self._taylor_approximation(self._affine)
-        print("APPROX : " + str(self._approx))
+        print("APPROX : ")
+        pprint(self._approx, use_unicode=True)
 
     # Responsible for injecting noise variables
-    def _inject(self, expression, index="0"):
-        # "Either it has empty args, in which case it is a leaf node in any expression tree"
-        if len(expression.args) == 0:
-            return expression
-        # "or it has args, in which case, it is a branch node of any expression tree"
-        else:
-            noise = symbols(str(self._machine_epsilon) + index)
-            self._noises.append(noise)
-            self._accurate[noise] = 0
-            self._interval[noise] = SetExpr(Interval(-self._machine_epsilon,self._machine_epsilon))
-            # evaluate=False more in a debug sense, to allow for later validation of injection
-            return Mul(expression.func(*[self._inject(x, index=index+str(ind)) for ind, x in enumerate(expression.args)],evaluate=False),(1 + noise),evaluate=False)
+    def _pre_walk(self, node, func, index=1):
+        func(node, index)
+
+        for i in range(0,len(node.args)):
+            self._pre_walk(node.args[i], func, index * 10 + i)
+
+    def _after_walk(self, node, func, index=1):
+        for i in range(0,len(node.args)):
+            self._after_walk(node.args[i], func, index * 10 + i)
+        
+        func(node, index)
+
+    def _convert_to_tree(self, expr, tree=None):
+        if tree is None:
+            tree = Node(expr.func)
+        
+        for arg in expr.args:
+            self._convert_to_tree(arg,tree=tree.insert(arg))
+
+        return tree
+
+    def _split(self, node, index):
+        if len(node.args) <= 2:
+            return node
+
+        children = [
+            node.args[0],
+            node.args[1]
+        ]
+
+        for i in range (2, len(node.args)):
+            children[0] = Node(node.func, [children[0],children[1]])
+            children[1] = node.args[i]
+
+        node.args = children  
+        
+    def _inject_noise(self, node, index):
+        if len(node.args) == 0:
+            return node
+
+        _t = Node(node.func, node.args)
+        noise = symbols(str(self._machine_epsilon) + str(index))
+
+        node.func = Mul
+        node.args = [
+            _t,
+           Node(Add, [
+               Node(1),
+               Node(noise)
+           ]) 
+        ]
+
+        self._noises.append(noise)
+        self._accurate[noise] = 0
+        self._interval[noise] = SetExpr(Interval(-self._machine_epsilon,self._machine_epsilon))
+
+        
+    def _convert_to_binary(self, expr):
+        tree = self._convert_to_tree(expr)
+        self._pre_walk(tree, lambda n,i : self._split(n, i))
+        return tree
+  
+    def _inject(self, expression):
+        tree = self._convert_to_binary(expression)
+        self._after_walk(tree, lambda n,i : self._inject_noise(n,i))
+        return tree.get_expression()
 
     def _cleanup(self, expression):
-        return self._interval_subs(expression,{})
+        return self._interval_subs(expression,self._interval)
 
     def _taylor_approximation(self, affine):
         ##
@@ -54,7 +113,9 @@ class Roundoff(Analysis,ABC):
         # f(x,0) = f(x)
         #                 = | T_1(f,x,0) + R_1(f,x,p) |
         ##
-        t_1 = Abs(reduce(lambda x,y: x + y, [diff(affine, noise) for noise in self._noises]).subs(self._accurate)) * self._machine_epsilon
+        #t_1 = reduce(lambda x,y: x + y, [diff(affine, noise).subs(self._accurate) * noise for noise in self._noises])
+        t_1 = reduce(lambda x,y: x + y, [diff(affine, noise).subs(self._accurate) for noise in self._noises])
+        approx_t_1 = self._machine_epsilon * Abs(t_1)
 
         ##
         # Taylor’s Inequality :
@@ -67,9 +128,118 @@ class Roundoff(Analysis,ABC):
         #
         # Idea : Exact Remainder, Compute Intervall for noises, upper bound is M
         ##
-        r_1 = Abs(reduce(lambda x,y: x + y,[diff(affine,e_i,e_j) for e_i in self._noises for e_j in self._noises]))
+        #r_1 = reduce(lambda x,y: x + y,[diff(affine,e_i,e_j) * e_i * e_j for e_i in self._noises for e_j in self._noises])
+        r_1 = reduce(lambda x,y: x + y,[diff(affine,e_i,e_j) for e_i in self._noises for e_j in self._noises])
+        approx_r_1 = self._cleanup(self._machine_epsilon ** 2 * Abs(r_1))
+
+        ##
+        # Why we can not use subs on the whole expression, when usionvert=convertng interval arithmetic.
+        # e,e0,e1 = symbols("e e0 e1", real=True, positive=True)
+        # l = SetExpr(Interval(-e,e))
+        # l * l = SetExpr(Interval(-e**2, e**2))
+        # (e0 * e1).subs({e0:l,e1:l}) = SetExpr(Interval(0, e**2))
+        ##
+
+        return approx_t_1 + approx_r_1
+
+    def _interval_add(self, sexpr, arg):
+        smin = sexpr.set.start
+        smax = sexpr.set.end
+
+        amin = None
+        amax = None 
+
+        # ARG is SetExpr
+        if isinstance(arg, SetExpr):
+            amin = arg.set.start
+            amax = arg.set.end
+        else:
+            amin = amax = arg
+
+        return SetExpr(
+            Interval(
+                smin + amin,
+                smax + amax
+            )
+        )
+
+    def _interval_mul(self, sexpr, arg):
+        smin = sexpr.set.start
+        smax = sexpr.set.end
+
+        amin = None
+        amax = None 
+
+        # ARG is SetExpr
+        if isinstance(arg, SetExpr):
+            amin = arg.set.start
+            amax = arg.set.end
+        else:
+            amin = amax = arg
         
-        return t_1 + r_1.subs(self._interval)
+        return SetExpr(
+            Interval(
+                min(smin * amin, smin * amax, smax * amin, smax * amax),
+                max(smin * amin, smin * amax, smax * amin, smax * amax)
+            )
+        )
+
+    def _interval_calc(self, sexpr, sargs, expr):
+        sres = sexpr[0]
+        func = lambda res, arg : res.func(arg)
+
+        if expr.is_Add:
+            func = lambda res, arg : self._interval_add(res, arg)
+        elif expr.is_Mul:
+            func = lambda res, arg : self._interval_mul(res, arg)
+        elif expr.is_Pow:
+            func = lambda res, arg : res.__pow__(arg)
+        ##
+        # Inequality, boundary solution
+        ##
+        elif isinstance(expr, Abs):
+            func = lambda res, arg : Abs(res.set.end)
+
+        ##
+        # Function using the set as only argument
+        ##
+        if len(expr.args) == 1:
+            return func(sres, sres)
+
+        for i in range(1,len(sexpr)):
+            sres = func(sres, sexpr[i])
+
+        missing = []
+        for arg in sargs:
+            try:
+                sres = func(sres, arg)
+            except TypeError:
+                missing.append(arg)
+
+        if len(missing) == 0:
+            return sres
+        else:
+            missing.append(sres)
+            return expr.func(*missing)
+
+    def _interval_arithmetic(self, expr, args):
+        res = None
+
+        # Determine if interval contained
+        sexpr = []
+        sargs = []
+        for c in args:
+            if isinstance(c,SetExpr):
+                sexpr.append(c)
+            else:
+                sargs.append(c)
+
+        if len(sexpr) == 0:
+            res = expr.func(*args) 
+        else:
+            res = self._interval_calc(sexpr, sargs, expr)
+        
+        return res
     
     def _interval_subs(self,expression,subs):
         ###
@@ -91,42 +261,12 @@ class Roundoff(Analysis,ABC):
 
         children = []
         if len(expression.args) == 0:
-            return expression.subs(subs)
+            child = expression.subs(subs)
+            return child
         else:
             children = [self._interval_subs(x,subs) for x in expression.args]
 
-        sexpr = None
-        sargs = []
-        for c in children:
-            if isinstance(c, SetExpr):
-                sexpr = c
-            else:
-                sargs.append(c)
-        
-        if sexpr is None:
-            res = expression.func(*children)
-        else:
-            if expression.is_Add:
-                print("T1")
-                res = sexpr.__add__(Add(*sargs))
-            elif expression.is_Mul:
-                print("T2")
-                res = sexpr.__mul__(Mul(*sargs))
-                print(res)
-            elif expression.is_Pow:
-                print("T3")
-                res = sexpr.__pow__(*sargs)
-            ##
-            # Inequality, boundary solution
-            ##
-            elif isinstance(expression, Abs):
-                if len(children) > 1:
-                    raise Exception("Interval was not compacted")
-                res = Abs(sexpr.set.end)
-            else:
-                res = expression.func(*children)
-
-        return res
+        return self._interval_arithmetic(expression, children)
     
     # precision excludes! implicit bit
     def absolute(self, subs, precision=23):
