@@ -1,4 +1,9 @@
-from sympy import symbols
+from vodes.utils.expressions import convert_to_tree, pre_walk
+from vodes.utils.node import Node
+from sympy import symbols, pprint, shape, Matrix
+from sympy.simplify.traversaltools import use
+from sympy.tensor.functions import NoShapeError
+from sympy.matrices.expressions.matexpr import MatrixSymbol
 
 class Problem:
     ##
@@ -12,6 +17,13 @@ class Problem:
         self.__iv = iv
         self.__interval = interval
 
+        # Differentiate between system of equations and single equation (of first order)
+        try:
+            (_,_) = shape(self.get_expression(*symbols('y t')))
+            self.matrix = True
+        except NoShapeError:
+            self.matrix = False
+    
     def get_expression(self, y, t):
         return self.__problem.subs({
             symbols('y') : y,

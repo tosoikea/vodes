@@ -5,7 +5,7 @@ import matplotlib.pyplot
 #
 from vodes.ode.problem import Problem
 from numpy.core.function_base import linspace
-from sympy import symbols as sym, Float, lambdify
+from sympy import pprint, lambdify
 from mpmath import mp
 
 class Solver(ABC):
@@ -44,7 +44,8 @@ class Solver(ABC):
 
         # Initialize solver
         step, symbols = self._sym_step()
-        self.__lambda_step = lambdify(symbols, step, "mpmath")
+        pprint(step)
+        self.__lambda_step = lambdify(symbols, step)
         # --
 
     def validate(self):
@@ -82,13 +83,21 @@ class Solver(ABC):
             return
 
         ax = []
-        ay = []
+        ays = [[]]
         ex = []
         ey = []
 
         for i in range(0,len(self.solution)):
             ax.append(self.solution[i][0])
-            ay.append(self.solution[i][1])
+
+            if self.problem.matrix:
+                for j in range(0, len(self.solution[i][1])):
+                    if len(ays) <= j:
+                        ays.append([])
+                    ays[j].append(self.solution[i][1][j])
+            else:
+                ays[0].append(self.solution[i][1])
+
 
         if not(exact is None):
             # exact function is no longer dependent of it self
@@ -99,7 +108,8 @@ class Solver(ABC):
             ey = lexact(ex)
             matplotlib.pyplot.plot(ex, ey)
 
-        matplotlib.pyplot.plot(ax, ay)
+        for ay in ays:
+            matplotlib.pyplot.plot(ax, ay)
         matplotlib.pyplot.show()
 
     # Global error as (absolute) maximum difference between exact and approximated values

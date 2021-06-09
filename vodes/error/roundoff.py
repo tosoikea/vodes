@@ -1,7 +1,8 @@
 from numpy.lib.arraysetops import isin
 from sympy.core import expr
 from vodes.error.analysis import Analysis
-from vodes.error.node import Node
+from vodes.utils.node import Node
+from vodes.utils.expressions import after_walk, convert_to_binary
 from abc import ABC, abstractmethod
 from functools import reduce
 # symbols, diff
@@ -29,43 +30,6 @@ class Roundoff(Analysis,ABC):
         self._approx = self._taylor_approximation(self._affine)
         print("APPROX : ")
         pprint(self._approx, use_unicode=True)
-
-    # Responsible for injecting noise variables
-    def _pre_walk(self, node, func, index=1):
-        func(node, index)
-
-        for i in range(0,len(node.args)):
-            self._pre_walk(node.args[i], func, index * 10 + i)
-
-    def _after_walk(self, node, func, index=1):
-        for i in range(0,len(node.args)):
-            self._after_walk(node.args[i], func, index * 10 + i)
-        
-        func(node, index)
-
-    def _convert_to_tree(self, expr, tree=None):
-        if tree is None:
-            tree = Node(expr.func)
-        
-        for arg in expr.args:
-            self._convert_to_tree(arg,tree=tree.insert(arg))
-
-        return tree
-
-    def _split(self, node, index):
-        if len(node.args) <= 2:
-            return node
-
-        children = [
-            node.args[0],
-            node.args[1]
-        ]
-
-        for i in range (2, len(node.args)):
-            children[0] = Node(node.func, [children[0],children[1]])
-            children[1] = node.args[i]
-
-        node.args = children  
         
     def _inject_noise(self, node, index):
         if len(node.args) == 0:
@@ -86,16 +50,10 @@ class Roundoff(Analysis,ABC):
         self._noises.append(noise)
         self._accurate[noise] = 0
         self._interval[noise] = SetExpr(Interval(-self._machine_epsilon,self._machine_epsilon))
-
-        
-    def _convert_to_binary(self, expr):
-        tree = self._convert_to_tree(expr)
-        self._pre_walk(tree, lambda n,i : self._split(n, i))
-        return tree
   
     def _inject(self, expression):
-        tree = self._convert_to_binary(expression)
-        self._after_walk(tree, lambda n,i : self._inject_noise(n,i))
+        tree = convert_to_binary(expression)
+        after_walk(tree, lambda n,i : self._inject_noise(n,i))
         return tree.get_expression()
 
     def _cleanup(self, expression):
