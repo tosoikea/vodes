@@ -3,7 +3,8 @@
 """Tests for `vodes` package."""
 
 import pytest
-from vodes.ode import runge
+from vodes.ode.runge import RK2
+from vodes.ode.problem import Problem
 import math
 from sympy import symbols
 from sympy.functions import exp
@@ -18,7 +19,8 @@ f2 = t * y + t
 
 
 def test_rk2_f1():
-    l = runge.RK2(f1, 1, (0,3), {"dt":1}, symbols=[y])
+    p1 = Problem(f1, 1, (0,3))
+    l = RK2(p1, {"dt":1})
     l.calculate()
 
     actual = l.solution
@@ -32,7 +34,8 @@ def test_rk2_f1():
     assert actual == expected
 
 def test_rk2_v1():
-    l = runge.RK2(f1, 1, (0,3), {"dt":0.5}, symbols=[y])
+    p1 = Problem(f1, 1, (0,3))
+    l = RK2(p1, {"dt":0.5})
     l.calculate()
 
     actual = l.solution
@@ -50,7 +53,8 @@ def test_rk2_v1():
     assert all([a[0] == b[0] and math.isclose(a[1],b[1],rel_tol=0.05) for a, b in zip(actual, expected)])
 
 def test_rk2_f2():
-    l = runge.RK2(f2, 1, (0,5), {"dt":1}, symbols=[y, t])
+    p2 = Problem(f2, 1, (0,5))
+    l = RK2(p2, {"dt":1})
     l.calculate()
 
     actual = l.solution
@@ -66,7 +70,8 @@ def test_rk2_f2():
     assert actual == expected
 
 def test_rk2_v2():
-    l = runge.RK2(f2, 1, (0,3), {"dt":0.5}, symbols=[y, t])
+    p2 = Problem(f2, 1, (0,3))
+    l = RK2(p2, {"dt":0.5})
     l.calculate()
 
     actual = l.solution

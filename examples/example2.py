@@ -3,7 +3,8 @@ import sys
 sys.path.append('../vodes')
 #
 
-from vodes.ode import runge
+from vodes.ode.runge import RK1, RK2, RK4
+from vodes.ode.problem import Problem
 import matplotlib.pyplot
 
 from sympy import symbols
@@ -17,6 +18,8 @@ t = symbols('t')
 y = symbols('y')
 f = c * y
 
+problem = Problem(f, iv, (0,1))
+
 # exact solution
 e = exp(c * t) * iv
 
@@ -29,9 +32,9 @@ error_r3 = []
 for i in range(0,6):
     step = 10 ** -i
     print(step)
-    lr1 = runge.RK1(f, iv, (0,1), {"dt":step}, symbols=[y, t])
-    lr2 = runge.RK2(f, iv, (0,1), {"dt":step}, symbols=[y, t])
-    lr3 = runge.RK4(f, iv, (0,1), {"dt":step}, symbols=[y, t])
+    lr1 = RK1(problem, {"dt":step})
+    lr2 = RK2(problem, {"dt":step})
+    lr3 = RK4(problem, {"dt":step})
 
     lr1.calculate()
     lr2.calculate()

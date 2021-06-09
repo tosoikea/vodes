@@ -3,67 +3,59 @@ import logging
 import matplotlib.pyplot
 
 #
+from vodes.ode.problem import Problem
 from numpy.core.function_base import linspace
-from sympy import symbols, Float, lambdify
+from sympy import symbols as sym, Float, lambdify
 from mpmath import mp
 
 class Solver(ABC):
-    def __init__(self, problem, y0, interval, opt = None, symbols = None):
+    # The symbolic encoding of the solver. MUST be initiated in the child classes
+    # All free variables, that are substituted later on, must be included in the returned tuple
+    # e.g. (y + h * 3 * y,[ y, h ])
+    @abstractmethod
+    def _sym_step(self):
+        pass
+
+    # Return parameters for lambdafied function
+    @abstractmethod
+    def _get_params(self, y ,t):
+        pass
+
+    def __init__(self, problem : Problem, opt = None):
+        self.logger = logging.getLogger(__name__)
+
+        # Precision of floating point calculation
+        # TODO : Proper usage within calculation
+        self.precision = 24
+
+        # Problem definition including equation and further parameters
         self.problem = problem
-        ## Precision of floating point calculation
-        self.precision = 1
-
-        # problems are dependent on time and itself
-        # TODO : Move Problem into separate class
-        self.__internal_symbols = [] if symbols is None else symbols
-        self.__internal_problem = lambdify(self.__internal_symbols, self.problem, "mpmath")
-
-        self.interval = interval
-        # 
-        self.y0 = y0
         self.solution = []
+
+        # steps continously appended or initially constructed by the implementing solver
+        self.steps = []
+        # --
 
         # optional arguments parsed by the implementing solvers
         self.opt = {} if opt is None else opt
 
-        # steps continously appended or initially constructed by the implementing solver
-        self.steps = []
-
-        self.logger = logging.getLogger(__name__)
-
-
         # validate the supplied parameters
         self.validate()
 
+        # Initialize solver
+        step, symbols = self._sym_step()
+        self.__lambda_step = lambdify(symbols, step, "mpmath")
+        # --
+
     def validate(self):
-        if len(self.interval) != 2:
+        if self.problem is None:
             exit(-1)
 
-        if len(self.__internal_symbols) > 2:
-            exit(-1)
+        self.problem.validate()
 
-    def _symbolic_eval(self, t, y):
-        # TODO : not working correctly, seems to be ignored
-        if len(self.__internal_symbols) == 0:
-            return self.problem.evalf(self.prec)
-        elif len(self.__internal_symbols) == 1:
-            return self.problem.evalf(self.prec, subs={self.__internal_symbols[0]: y})
-        else:
-            return self.problem.evalf(self.prec, subs={self.__internal_symbols[0]: y, self.__internal_symbols[1] : t})
-
-    ## way more efficient than _symbolic_eval
-    def _eval(self, t, y):
-        mp.prec = self.precision
-        if len(self.__internal_symbols) == 0:
-            return self.__internal_problem()
-        elif len(self.__internal_symbols) == 1:
-            return self.__internal_problem(y)
-        else:
-            return self.__internal_problem(y, t)
-
-    @abstractmethod
-    def step(self, t, y):
-        pass
+    ## way more efficient than symbolic evaluation
+    def _eval(self, y, t):
+        return self.__lambda_step(*self._get_params(y ,t))
 
     def store(self, t, y):
         self.logger.debug('Calculated %f for %d',y,t)
@@ -73,17 +65,16 @@ class Solver(ABC):
         if len(self.solution) != 0:
             self.solution = []
             self.steps = []
-            self.validate()
 
         # initial values
-        self.solution.append((Float(self.interval[0], self.precision), Float(self.y0, self.precision)))
+        self.solution.append((self.problem.start(), self.problem.initial()))
         self.logger.debug('Starting calculate with %f at %d',self.solution[0][1], self.solution[0][0])
 
         while len(self.steps) > 0:
-            t = self.steps.pop(0), self.precision
-            y = self.solution[-1][1], self.precision
+            t = self.steps.pop(0)
+            y = self.solution[-1][1]
 
-            res = self.step(self.solution[-1][0],y)
+            res = self._eval(self.solution[-1][0],y)
             self.store(t, res)
 
     def show(self, exact = None, ticks=100):
@@ -104,7 +95,7 @@ class Solver(ABC):
             lexact = lambdify(exact.free_symbols, exact, modules=['numpy'])
             
             # evenly spaced samples of size ticks
-            ex = linspace(self.interval[0],self.interval[1],num=ticks)
+            ex = linspace(self.problem.start(),self.problem.end(),num=ticks)
             ey = lexact(ex)
             matplotlib.pyplot.plot(ex, ey)
 
