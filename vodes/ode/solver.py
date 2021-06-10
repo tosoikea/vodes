@@ -4,8 +4,9 @@ import matplotlib.pyplot
 
 #
 from vodes.ode.problem import Problem
+from vodes.error.roundoff import Roundoff
 from numpy.core.function_base import linspace
-from sympy import pprint, lambdify
+from sympy import pprint, lambdify, Symbol, Matrix
 from mpmath import mp
 
 class Solver(ABC):
@@ -45,6 +46,7 @@ class Solver(ABC):
         # Initialize solver
         step, symbols = self._sym_step()
         pprint(step)
+
         self.__lambda_step = lambdify(symbols, step)
         # --
 

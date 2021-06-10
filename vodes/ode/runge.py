@@ -1,5 +1,5 @@
 from vodes.ode.solver import Solver
-from sympy import symbols, pprint, MatrixSymbol, shape
+from sympy import symbols, pprint, MatrixSymbol, shape, simplify
 from abc import ABC, abstractmethod
 
 class RK(Solver,ABC):
@@ -37,7 +37,7 @@ class RK(Solver,ABC):
     def _sym_step(self):
         self.y = self._get_sym(["y"])
         self.t, self.h = symbols('t h')
-        return (self._kutta_step(self.problem), [self.y, self.t, self.h])
+        return (self._kutta_step(self.problem).doit(), [self.y, self.t, self.h])
 
     def _get_sym(self, names : list):
         if self.problem.matrix:

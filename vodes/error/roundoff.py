@@ -1,8 +1,9 @@
+from decimal import InvalidOperation
 from numpy.lib.arraysetops import isin
 from sympy.core import expr
 from vodes.error.analysis import Analysis
 from vodes.utils.node import Node
-from vodes.utils.expressions import after_walk, convert_to_binary
+from vodes.utils.expressions import after_walk, pre_walk, convert_to_binary, convert_to_tree
 from abc import ABC, abstractmethod
 from functools import reduce
 # symbols, diff
@@ -10,24 +11,64 @@ from sympy import *
 from sympy.sets.setexpr import SetExpr
 
 class Roundoff(Analysis,ABC):
+    ##
+    # Converts the symbolic expression into a workable expression.
+    # This includes atm only the conversion of matrix operations.
+    ##
+    def _pre_proc(self, problem):
+        tree = convert_to_tree(problem)
+        pprint(tree.get_expression())
+        pre_walk(tree, lambda n,i : self.__pre_proc_node(n,i))
+        return tree.get_expression().doit()
+
+    def __pre_proc_node(self, node, index):
+        if len(node.args) == 3:
+            expr = node.get_expression()
+            if expr.is_MatrixExpr and (not expr.is_MatMul) and (not expr.is_MatAdd):
+                m = []
+                for i in range(1, expr.rows + 1):
+                    gen = f'{expr.name}{i}(1:{expr.cols+1})'
+                    row = symbols(gen)
+
+                    if len(row) == 1:
+                        m.append([row[0]])
+                    else:
+                        m.append(row)
+
+                self._matrix_translation[expr.name] = Matrix(m)
+                node.args = []
+                node.func = self._matrix_translation[expr.name]
+
+
     def __init__(self, problem):
         self._problem = problem
+
+        # translation of symbols (e.g. y -> [[y11,y12],[y21,y22])
+        self._matrix_translation = {}
+
         # contains all noise variables e_i
         self._noises = []
         # dictionary to allow substitution of all noise variables to 0 i.e. exact calculation
         self._accurate = {}
         self._interval = {}
+
+        if hasattr(self._problem,"is_MatrixExpr") and self._problem.is_MatrixExpr:
+            self._problem = self._pre_proc(self._problem)
+        else:
+            self._problem = Matrix([self._problem])
+
+        pprint(self._problem)
         
         # with lowest precision (mantissa = 0) we can still display 1 (2^0 * 1) => e <= 1
         # it is impossible to exactly display 0 with an arbitrary amount of floating point precision => e > 0
         # => e \in (0,1]
         self._machine_epsilon = symbols("e", real=True, positive=True)
 
-        self._affine = self._inject(self._problem)
+        self._affine = Matrix(list(map(lambda r : self._inject(r), self._problem)))
         print("AFFINE : ")
         pprint(self._affine)
 
-        self._approx = self._taylor_approximation(self._affine)
+        self._approx = Matrix(list(map(lambda a : self._taylor_approximation(a), self._affine)))
         print("APPROX : ")
         pprint(self._approx, use_unicode=True)
         
@@ -218,7 +259,7 @@ class Roundoff(Analysis,ABC):
         ###
 
         children = []
-        if len(expression.args) == 0:
+        if not hasattr(expression, 'args') or len(expression.args) == 0:
             child = expression.subs(subs)
             return child
         else:
@@ -229,4 +270,36 @@ class Roundoff(Analysis,ABC):
     # precision excludes! implicit bit
     def absolute(self, subs, precision=23):
         subs[self._machine_epsilon] = 2**(-precision)
-        return self._interval_subs(self._approx, subs)
+
+        ##
+        # Heavy overhead - Only valid for development purposes
+        # TODO : Increase preprocessing, remove translation overhead
+        ##
+        translated_subs = {}
+        for key in subs:
+            if key.name in self._matrix_translation:
+                sub = subs[key]
+                trs = self._matrix_translation[key.name]
+                if not sub.is_Matrix:
+                    raise InvalidOperation("Expected a matrix substitution.")
+                else:
+                    if sub.rows != trs.rows or sub.cols != trs.cols:
+                        raise InvalidOperation("The substitution matrix has wrong dimensions.")
+                    else:
+                        for i in range(0,sub.rows):
+                            # cannot index
+                            if sub.cols == 1:
+                                translated_subs[trs[i]] = sub[i]
+                            else:
+                                for j in range(0,sub.cols):
+                                    # e.g. a_i_j = 2
+                                    translated_subs[trs[i][j]] = sub[i][j]
+            else:
+                translated_subs[key] = subs[key]
+
+        res = list(map(lambda a : self._interval_subs(a, translated_subs), self._approx))
+
+        if len(res) == 1:
+            return res[0]
+        else:
+            return Matrix(res)
