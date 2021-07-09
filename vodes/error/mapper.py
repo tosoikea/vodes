@@ -1,4 +1,4 @@
-from vodes.error.ia_evaluation import MachineError
+from vodes.symbolic.symbols import MachineError
 from vodes.symbolic.interval import Interval
 from pymbolic.mapper import RecursiveMapper
 

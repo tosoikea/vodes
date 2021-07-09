@@ -1,5 +1,121 @@
-from pymbolic.primitives import Variable
+from pymbolic.primitives import Expression, Variable
 
+class BoundedValue:
+    def __init__(self, value, open:bool):
+        self.value = value
+        self.open = open
+
+    def __eq__(self, o: object) -> bool:
+        if isinstance(o, BoundedValue):
+            return o.value == self.value and o.open == self.open
+
+        return False
+
+    def __str__(self) -> str:
+        if self.open:
+            return f'B({self.value})'
+        else:
+            return f'B[{self.value}]'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+class Boundary:
+    def __init__(self, lower:BoundedValue, upper:BoundedValue):
+        assert lower
+        assert upper
+
+        self.lower = lower
+        self.upper = upper
+
+    def __eq__(self, o: object) -> bool:
+        if isinstance(o, Boundary):
+            return self.lower == o.lower and self.upper == o.upper
+
+        return False
+
+    def contains(self, item):
+        res = False
+
+        if self.lower.open:
+            res = self.lower.value < item
+        else:
+            res = self.lower.value <= item
+
+        if self.upper.open:
+            res = res and self.upper.value > item
+        else:
+            res = res and self.upper.value >= item
+
+        return res
+
+    def __str__(self) -> str:
+        return f'{"(" if self.lower.open else "["}{self.lower.value},{self.upper.value}{")" if self.upper.open else "]"}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def intersect(self, other):
+        if not isinstance(other,Boundary):
+            raise TypeError(f"Invalid type {type(other)} for intersection of boundary intervals.")
+
+        l = self.lower
+        if other.lower.value > l.value:
+            l = other.lower
+        elif other.lower.value == l.value:
+            l = BoundedValue(value = l.value, open=l.open or other.lower.open)
+
+        r = self.upper
+        if other.upper.value < r.value:
+            r = other.upper
+        elif other.upper.value == r.value:
+            r = BoundedValue(value = r.value, open=r.open or other.upper.open)
+
+        if r.value < l.value:
+            return None
+        elif r.value == l.value and (r.open or l.open):
+            return None
+        else:
+            return Boundary(lower=l,upper=r)
+
+class BoundedExpression(Expression):
+    init_arg_names = ("boundary","expression",)
+
+    def __init__(self,expression,boundary:Boundary):
+        self.boundary = boundary
+        self.expression = expression
+
+    def __getinitargs__(self):
+        return self.expression, self.boundary
+
+    @property
+    def expr(self):
+        return self.expression
+
+    @property
+    def bound(self):
+        return self.boundary
+
+class BoundedVariable(Variable,BoundedExpression):
+    init_arg_names = ("boundary","expression",)
+
+    def __init__(self,name:str,boundary:Boundary):
+        super().__init__(name=name)
+        self.boundary = boundary
+        # dangerous
+        self.expression = self
+
+class MachineError(BoundedVariable):
+    def __init__(self):
+        super().__init__(
+            name="e",
+            boundary=Boundary(
+                lower=BoundedValue(value=0,open=True),
+                upper=BoundedValue(value=1,open=True)
+            )
+        )
+
+# TODO : Move to BoundedVariable
 class Noise(Variable):
     glb_index = 0
 

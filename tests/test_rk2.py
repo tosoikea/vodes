@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Tests for `vodes` package."""
+"""Tests for `vodes.runge` package."""
 
 import pytest
 from vodes.ode.runge import RK2

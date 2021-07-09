@@ -13,3 +13,4 @@ flake8==3.7.8
 twine==1.14.0
 Sphinx==1.8.5
 wheel==0.33.6
+pymbolic==2021.1
