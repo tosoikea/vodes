@@ -57,17 +57,8 @@ class IntervalAnalysis(Analysis):
         print(self.__expr)
 
     def absolute(self, context: dict):
-        err = Abs(self._problem - self.__expr)
+        err = Max(Abs(self._problem - self.__expr))
 
         print("Error :")
         print(err)
-        bexprs = ExactIntersectionEvaluator(context=context,symbol=MachineError())(err)
-
-        res = []
-        for bexpr in bexprs:
-            res.append(BoundedExpression(
-                expression=bexpr.expr.up,
-                boundary=bexpr.bound
-            ))
-
-        return res
+        return ExactIntersectionEvaluator(context=context,symbol=MachineError())(err)

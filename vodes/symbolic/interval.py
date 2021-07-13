@@ -5,7 +5,8 @@ from sys import intern
 
 from numpy.lib.arraysetops import isin
 from sympy.core.function import expand
-from vodes.symbolic.absolute import AbsoluteEvaluator
+from vodes.symbolic.absolute import Abs
+from vodes.symbolic.maximum import Max
 
 from sympy.series.limits import limit
 from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
@@ -183,6 +184,17 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 expression=Interval(lower=lexpr, upper=rexpr),
                 boundary=self._symbol.bound
             )
+        ]
+
+    def map_maximum(self, expr:Max) -> List[BoundedExpression]:
+        bexprs = self.rec(expr.expr)
+        return [
+            BoundedExpression(
+                expression=item.expr.up,
+                boundary=item.boundary
+            ) 
+            for sublist in list(map(lambda bexpr : self._sabs(bexpr.expr, bexpr.bound), bexprs))
+                 for item in sublist
         ]
 
     def map_absolute(self, expr:Abs) -> List[BoundedExpression]:
