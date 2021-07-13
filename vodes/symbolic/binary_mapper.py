@@ -42,3 +42,9 @@ class BinaryMapper(RecursiveMapper):
     # always binary (numerator, denominator)
     def map_quotient(self, expr):
         return expr
+
+    def map_constant(self, expr):
+        return expr
+        
+    def map_variable(self, expr):
+        return expr

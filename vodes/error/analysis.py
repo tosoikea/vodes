@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from vodes.symbolic.absolute import Abs
+from vodes.symbolic.maximum import Max
 
 from pymbolic.interop.sympy import PymbolicToSympyMapper
-from vodes.symbolic.symbols import MachineError
+from vodes.symbolic.symbols import BoundedExpression, MachineError
 from vodes.symbolic.interval import ExactIntersectionEvaluator
 
 from vodes.error.mapper import IntervalMapper
@@ -57,7 +58,16 @@ class IntervalAnalysis(Analysis):
 
     def absolute(self, context: dict):
         err = Abs(self._problem - self.__expr)
-        noised = ExactIntersectionEvaluator(context=context,symbol=MachineError())(err)
-        print("N : ")
-        print(PymbolicToSympyMapper()(noised[0].expr.up))
-        return noised
+
+        print("Error :")
+        print(err)
+        bexprs = ExactIntersectionEvaluator(context=context,symbol=MachineError())(err)
+
+        res = []
+        for bexpr in bexprs:
+            res.append(BoundedExpression(
+                expression=bexpr.expr.up,
+                boundary=bexpr.bound
+            ))
+
+        return res

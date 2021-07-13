@@ -3,8 +3,29 @@
 """Tests for `vodes.error.interval` class."""
 
 from random import randrange
-from vodes.symbolic.interval import Interval, IntervalEvaluator as IE
+from vodes.symbolic.symbols import BoundedExpression, BoundedVariable, DummyVariable
+import pytest
+from vodes.symbolic.interval import Interval
 
+@pytest.fixture
+def evaluators():
+    from vodes.symbolic.interval import ExactIntersectionEvaluator as EIE
+    return [
+        lambda c,s : EIE(context=c, symbol=s)
+    ]
+
+@pytest.fixture
+def static_evaluators():
+    from vodes.symbolic.interval import ExactIntersectionEvaluator as EIE
+    return [
+       EIE(context={}, symbol=DummyVariable())
+    ]
+
+def assert_static(res,val):
+    assert(len(res)==1)
+    assert(isinstance(res[0],BoundedExpression))
+
+    assert res[0].expr == val
 
 def test_setup():
     # Arrange
@@ -15,58 +36,62 @@ def test_setup():
     i = Interval(lower,upper)
 
     # Assert
-    assert i.upper == upper
-    assert i.lower == lower
+    assert i.up == upper
+    assert i.low == lower
 
-def test_scalar_add():
+def test_scalar_add(static_evaluators):
     # Arrange
     upper = randrange(5000)
     lower = upper - randrange(5000)
     a = randrange(5000)
 
-    # Act
-    li = IE()(Interval(lower,upper) + a)
-    ri = IE()(a + Interval(lower,upper))
+    e = Interval(lower=lower + a, upper=upper + a)
 
-    # Assert
-    assert li.upper == upper + a
-    assert ri.upper == upper + a
-    assert li.lower == lower + a
-    assert ri.lower == lower + a
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(lower,upper) + a)
+        ri = eval(a + Interval(lower,upper))
 
-def test_scalar_sub():
+        # Assert
+        assert_static(li, e)
+        assert_static(ri, e)
+
+def test_scalar_sub(static_evaluators):
     # Arrange
     upper = randrange(5000)
     lower = upper - randrange(5000)
     a = randrange(5000)
 
-    # Act
-    li = IE()(Interval(lower,upper) - a)
-    ri = IE()(a - Interval(lower,upper))
+    el = Interval(lower = lower - a, upper = upper - a)
+    er = Interval(lower = a - upper, upper = a - lower)
 
-    # Assert
-    assert li.upper == upper - a
-    assert ri.upper == a - lower
-    assert li.lower == lower - a
-    assert ri.lower == a - upper
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(lower,upper) - a)
+        ri = eval(a - Interval(lower,upper))
 
-def test_scalar_mul():
+        # Assert
+        assert_static(li, el)
+        assert_static(ri, er)
+
+def test_scalar_mul(static_evaluators):
     # Arrange
     upper = randrange(5000)
     lower = upper - randrange(5000)
     a = randrange(5000)
 
-    # Act
-    li = IE()(Interval(lower,upper) * a)
-    ri = IE()(a * Interval(lower,upper))
+    e = Interval(lower = lower * a, upper = upper * a)
 
-    # Assert
-    assert li.upper == upper * a
-    assert ri.upper == upper * a
-    assert li.lower == lower * a
-    assert ri.lower == lower * a
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(lower,upper) * a)
+        ri = eval(a * Interval(lower,upper))
 
-def test_interval_add():
+        # Assert
+        assert_static(li, e)
+        assert_static(ri, e)
+
+def test_interval_add(static_evaluators):
     # Arrange
     u1 = randrange(5000)
     l1 = u1 - randrange(5000)
@@ -74,17 +99,16 @@ def test_interval_add():
     u2 = randrange(5000)
     l2 = u2 - randrange(5000)
 
-    # Act
-    li = IE()(Interval(l1,u1) + Interval(l2,u2))
-    ri = IE()(Interval(l2,u2) + Interval(l1,u1))
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(l1,u1) + Interval(l2,u2))
+        ri = eval(Interval(l2,u2) + Interval(l1,u1))
 
-    # Assert
-    assert li.upper == u1 + u2
-    assert ri.upper == u1 + u2
-    assert li.lower == l1 + l2
-    assert ri.lower == l1 + l2
+        # Assert
+        assert_static(li, Interval(lower=l1+l2,upper=u1+u2))
+        assert_static(ri, Interval(lower=l1+l2,upper=u1+u2))
     
-def test_interval_sub():
+def test_interval_sub(static_evaluators):
     # Arrange
     u1 = randrange(5000)
     l1 = u1 - randrange(5000)
@@ -92,18 +116,16 @@ def test_interval_sub():
     u2 = randrange(5000)
     l2 = u2 - randrange(5000)
 
-    # Act
-    li = IE()(Interval(l1,u1) - Interval(l2,u2))
-    ri = IE()(Interval(l2,u2) - Interval(l1,u1))
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(l1,u1) - Interval(l2,u2))
+        ri = eval(Interval(l2,u2) - Interval(l1,u1))
 
-    # Assert
-    assert li.upper == u1 - l2
-    assert ri.upper == u2 - l1
-    assert li.lower == l1 - u2
-    assert ri.lower == l2 - u1
+        # Assert
+        assert_static(li, Interval(lower=l1-u2,upper=u1-l2))
+        assert_static(ri, Interval(lower=l2-u1,upper=u2-l1))
     
-    
-def test_interval_mul():
+def test_interval_mul(static_evaluators):
     # Arrange
     u1 = randrange(5000)
     l1 = u1 - randrange(5000)
@@ -111,13 +133,19 @@ def test_interval_mul():
     u2 = randrange(5000)
     l2 = u2 - randrange(5000)
 
-    # Act
-    li = IE()(Interval(l1,u1) * Interval(l2,u2))
-    ri = IE()(Interval(l2,u2) * Interval(l1,u1))
+    e = Interval(
+        lower=min(u1 * l2, u1 * u2, l1 * l2, l1 * u2),
+        upper=max(u1 * l2, u1 * u2, l1 * l2, l1 * u2)
+    )
 
-    # Assert
-    assert li.upper == max(u1 * l2, u1 * u2, l1 * l2, l1 * u2)
-    assert ri.upper == max(u1 * l2, u1 * u2, l1 * l2, l1 * u2)
-    assert li.lower == min(u1 * l2, u1 * u2, l1 * l2, l1 * u2)
-    assert ri.lower == min(u1 * l2, u1 * u2, l1 * l2, l1 * u2)
+    for eval in static_evaluators:
+        # Act
+        li = eval(Interval(l1,u1) * Interval(l2,u2))
+        ri = eval(Interval(l2,u2) * Interval(l1,u1))
+
+        # Assert
+        assert_static(li, e)
+        assert_static(ri, e)
+
+
 

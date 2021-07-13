@@ -1,7 +1,11 @@
 from pymbolic.primitives import Expression, Variable
+from sys import intern
+from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
 
 class BoundedValue:
     def __init__(self, value, open:bool):
+        assert not (value is None)
+        
         self.value = value
         self.open = open
 
@@ -10,6 +14,9 @@ class BoundedValue:
             return o.value == self.value and o.open == self.open
 
         return False
+
+    def __hash__(self):
+        return hash((self.value, self.open))
 
     def __str__(self) -> str:
         if self.open:
@@ -33,6 +40,9 @@ class Boundary:
             return self.lower == o.lower and self.upper == o.upper
 
         return False
+
+    def __hash__(self):
+        return hash((self.lower, self.upper))
 
     def contains(self, item):
         res = False
@@ -96,14 +106,28 @@ class BoundedExpression(Expression):
     def bound(self):
         return self.boundary
 
-class BoundedVariable(Variable,BoundedExpression):
-    init_arg_names = ("boundary","expression",)
+    def make_stringifier(self, originating_stringifier=None):
+        return BoundedExpressionStringifyMapper()
+
+    mapper_method = intern("map_bounded_expression")
+
+class BoundedExpressionStringifyMapper(StringifyMapper):
+    def map_bounded_expression(self, expr, enclosing_prec, *args, **kwargs):
+        return f'[{expr.bound},{expr.expr}]'
+
+class BoundedVariable(Variable):
+    init_arg_names = ("boundary","name",)
 
     def __init__(self,name:str,boundary:Boundary):
         super().__init__(name=name)
-        self.boundary = boundary
-        # dangerous
-        self.expression = self
+        self.__boundary = boundary
+
+    def __getinitargs__(self):
+        return (self.bound, self.name, )
+
+    @property
+    def bound(self):
+        return self.__boundary
 
 class MachineError(BoundedVariable):
     def __init__(self):
@@ -111,6 +135,16 @@ class MachineError(BoundedVariable):
             name="e",
             boundary=Boundary(
                 lower=BoundedValue(value=0,open=True),
+                upper=BoundedValue(value=1,open=True)
+            )
+        )
+
+class DummyVariable(BoundedVariable):
+    def __init__(self):
+        super().__init__(
+            name="dummy",
+            boundary=Boundary(
+                lower=BoundedValue(value=-1,open=True),
                 upper=BoundedValue(value=1,open=True)
             )
         )

@@ -2,18 +2,20 @@ from functools import reduce
 from abc import abstractmethod, ABC
 
 from sys import intern
+
+from numpy.lib.arraysetops import isin
+from sympy.core.function import expand
 from vodes.symbolic.absolute import AbsoluteEvaluator
-from sympy.geometry.util import intersection
-from sympy.matrices.expressions.matadd import combine
 
 from sympy.series.limits import limit
 from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
 from vodes.symbolic.absolute import Abs
+from vodes.symbolic.bounded_mapper import BoundedMapper
+from pymbolic.mapper.evaluator import EvaluationMapper
 
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.polynomial import Polynomial
-from pymbolic.primitives import Expression, Lookup, Quotient, Variable, Sum, Product
-from pymbolic.mapper.evaluator import EvaluationMapper
+from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product, is_constant
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
 from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
 
@@ -38,7 +40,7 @@ class Interval(Expression):
     init_arg_names = ("lower", "upper",)
 
     def __init__(self, lower, upper=None):
-        assert(lower)
+        assert(not lower is None)
 
         # degenerate interval
         if upper is None:
@@ -72,9 +74,6 @@ class IntervalStringifyMapper(StringifyMapper):
 
         return f'[{lower},{upper}]'
 
-    def map_approx_polynomial(self, expr, enclosing_prec, *args, **kwargs):
-        return str(Polynomial(expr.Base, expr.Data))
-
 
 class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     """Class to evaluate expressions containing symbolic intervals. These expressions have to be limited to one free variable after substitution.
@@ -88,7 +87,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         _symbol (BoundedVariable): The stored symbol, only allowed free variable.
     """
     def __init__(self, context: dict, symbol: BoundedVariable):
-        assert(context)
+        assert(not context is None)
         assert(symbol)
 
         self._context = context
@@ -104,12 +103,18 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 rexpr = r
 
                 if isinstance(l, BoundedExpression):
-                    bound.intersect(l.bound)
+                    bound = bound.intersect(l.bound)
                     lexpr = l.expr
+                # May result from BoundedMapper
+                elif isinstance(l, Variable) or is_constant(l):
+                    lexpr = Interval(l)
 
                 if isinstance(r, BoundedExpression):
-                    bound.intersect(r.bound)
+                    bound = bound.intersect(r.bound)
                     rexpr = r.expr
+                # May result from BoundedMapper
+                elif isinstance(r, Variable) or is_constant(l):
+                    rexpr = Interval(l)
 
                 if not (isinstance(lexpr, Interval) and isinstance(rexpr, Interval)):
                     raise TypeError(
@@ -123,11 +128,11 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         return [
             Interval(expr)
         ]
-
+  
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         res = None
         # we do not substitute the free symbol
-        if not str(self._symbol.expr) in self._context and self._symbol == expr:
+        if not str(self._symbol.name) in self._context and self._symbol == expr:
             res = Interval(expr)
         else:
             res = EvaluationMapper(context=self._context)(expr)
@@ -160,10 +165,22 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self.rec(expr.denominator)
         )
 
-    def map_interval(self, expr) -> List[BoundedExpression]:
+    def map_interval(self, expr:Interval) -> List[BoundedExpression]:
+        l = BoundedMapper(context=self._context, symbol=self._symbol)(expr.low)
+        r = BoundedMapper(context=self._context, symbol=self._symbol)(expr.up)
+
+        lexpr = l
+        rexpr = r
+
+        if isinstance(l, BoundedExpression):
+            lexpr = l.expr
+
+        if isinstance(r, BoundedExpression):
+            rexpr = r.expr
+
         return [
             BoundedExpression(
-                expression=expr,
+                expression=Interval(lower=lexpr, upper=rexpr),
                 boundary=self._symbol.bound
             )
         ]
@@ -440,7 +457,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         res = self.__eval(fs, b.lower, order)
 
         if len(res[0]) == 1:
-            return res
+            return res[0][0]
 
         flat_intersections = [
             item for sublist in intersections for subsublist in sublist for item in subsublist]
@@ -570,7 +587,6 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
     def __sint(self, pfs:list, b:Boundary):
         """Determine the upper and lower bound of the symbolic interval and return it."""
         fs = [PymbolicToSympyMapper()(f) for f in pfs]
-        print(fs)
 
         # (1) Determine intersection for possible min/max switch
         intersections = self.__intersections(fs,b)
@@ -581,9 +597,6 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         # Convert Bounded Values to Boundaries
         min_res_bounded = self.__bound_result(min_res,b)
         max_res_bounded = self.__bound_result(max_res,b)
-
-        print(min_res_bounded)
-        print(max_res_bounded)
 
         # TODO : Very inefficient, but hey
         result = []
@@ -601,6 +614,9 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                     )
                 )
 
+        print(f"_sint: {list(map(expand,fs))}")
+        print(f"min: {min_res_bounded} , max: {max_res_bounded}")
+
         return result
 
     def _smul(self, l, r, b):
@@ -614,14 +630,63 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         return self.__sint(pfs, b)
 
 
+    def __convert_to_positive(self, pf, b:Boundary):
+        result = []
+
+        f = PymbolicToSympyMapper()(pf)
+
+        # Determine intersections with x axis
+        xs = [b.lower]
+        xs.extend(list(map(lambda x : BoundedValue(value=x, open=False),self.__intersection(f,0,b))))
+        xs.append(b.upper)
+
+        print(xs)
+        for i in range(len(xs) - 1):
+            x = (xs[i].value + xs[i + 1].value) / 2
+            y = self.__boundary_eval(f, BoundedValue(x,False))
+
+            bi = Boundary(
+                lower = xs[i],
+                upper = xs[i + 1]
+            )
+
+            if y > 0:
+                result.append(
+                    BoundedExpression(
+                        expression=pf,
+                        boundary=bi
+                    )
+                )
+            # if y == 0 -> everywhere 0 between two points
+            else:
+                result.append(
+                    BoundedExpression(
+                        expression=(-1) * pf,
+                        boundary=bi
+                    )
+                )
+
+        return result
+
+
 
     def _sabs(self, i:Interval, b:Boundary):
-        pfs = [
-            AbsoluteEvaluator(absolute=True,b=b)(i.up),
-            AbsoluteEvaluator(absolute=True,b=b)(i.low)
-        ]
+        lfs = self.__convert_to_positive(i.low, b)
+        ufs = self.__convert_to_positive(i.up, b)
 
-        return self.__sint(pfs, b)
+         # TODO : Very inefficient, but hey
+        result = []
+        for lf in lfs:
+            for uf in ufs:
+                combined = lf.boundary.intersect(uf.boundary)
+
+                if combined is None:
+                    continue
+
+                    
+                result.extend(self.__sint(pfs=[lf.expr,uf.expr],b=combined))
+
+        return result
 
     def _spow(self, l, r):
         pass

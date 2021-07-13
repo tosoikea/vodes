@@ -14,15 +14,15 @@ class Abs(Expression):
     Attributes:
         expression: The wrapped expression.
     """
-    init_arg_names = ("expression")
+    init_arg_names = ("expression",)
 
     def __init__(self, expression):
-        assert(expression)
+        assert(not expression is None)
 
         self.expression = expression
 
     def __getinitargs__(self):
-        return self.expression
+        return (self.expr,)
 
     @property
     def expr(self):
@@ -47,9 +47,6 @@ class AbsoluteEvaluator(RecursiveMapper):
     def __init__(self, absolute=False, b:Boundary=None):
         self.absolute = absolute
         self.boundary = b
-    
-    def handle_unsupported_expression(self, expr, *args, **kwargs):
-        return expr
 
     def map_absolute(self, expr:Abs) -> Expression:
         return AbsoluteEvaluator(absolute=True)(expr.expr)
@@ -76,13 +73,3 @@ class AbsoluteEvaluator(RecursiveMapper):
                 return (-1) * expr
             
         raise ValueError(f"Cannot evaluate symbol {expr}")
-
-    def map_sum(self, expr:Sum) -> Expression:
-        return sum(self.rec(child) for child in expr.children)
-
-    def map_product(self, expr:Product) -> Expression:
-        from pytools import product
-        return product(self.rec(child) for child in expr.children)
-
-    def map_quotient(self, expr):
-        return self.rec(expr.numerator) / self.rec(expr.denominator)
