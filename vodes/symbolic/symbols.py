@@ -1,3 +1,5 @@
+from operator import attrgetter
+from typing import List
 from pymbolic.primitives import Expression, Variable
 from sys import intern
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
@@ -87,6 +89,52 @@ class Boundary:
             return None
         else:
             return Boundary(lower=l,upper=r)
+
+    def union(self, other):
+        if not isinstance(other,Boundary):
+            raise TypeError(f"Invalid type {type(other)} for union of boundary intervals.")
+
+        l = self.lower
+        if other.lower.value < l.value:
+            l = other.lower
+        elif other.lower.value == l.value:
+            l = BoundedValue(value = l.value, open=l.open and other.lower.open)
+
+        r = self.upper
+        if other.upper.value > r.value:
+            r = other.upper
+        elif other.upper.value == r.value:
+            r = BoundedValue(value = r.value, open=r.open and other.upper.open)
+        
+        return Boundary(lower=l,upper=r)
+
+
+    # TODO : Expects other sorted by lower boundary
+    def difference(self, other):
+        if not isinstance(other,list):
+            raise TypeError(f"Invalid type {type(other)} for difference of boundary intervals.")
+
+        other = sorted(other, key=attrgetter("lower"))
+
+        res = []
+
+        l = self.lower
+
+        for b in other:
+            if l < b.lower:
+                res.append(
+                    Boundary(
+                        lower=l,
+                        upper=BoundedValue(
+                            value=b.lower.value,
+                            open=not b.lower.open
+                        )
+                    )
+                )
+            l = b.upper
+
+        return res
+
 
 class BoundedExpression(Expression):
     init_arg_names = ("boundary","expression",)

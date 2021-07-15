@@ -28,6 +28,9 @@ class IntervalMapper(ErrorMapper):
     def map_quotient(self, expr):
         return (self.rec(expr.numerator) / self.rec(expr.denominator)) * Interval(1 - MachineError(), 1 + MachineError())
 
+    def map_power(self, expr):
+        return (self.rec(expr.base) ** self.rec(expr.exponent)) * Interval(1 - MachineError(), 1 + MachineError())
+
     # TODO : Constants can also introduce rounding error
     def map_interval(self, expr):
         return expr

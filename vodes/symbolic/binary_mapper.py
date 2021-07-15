@@ -48,3 +48,6 @@ class BinaryMapper(RecursiveMapper):
         
     def map_variable(self, expr):
         return expr
+
+    def map_power(self, expr):
+        return expr
