@@ -16,7 +16,7 @@ class ErrorMapper(RecursiveMapper):
 
 class IntervalMapper(ErrorMapper):
     def map_variable(self, expr):
-        return Interval(expr - MachineError(), expr + MachineError())
+        return Interval(expr - expr * MachineError(), expr + expr * MachineError())
 
     def map_sum(self, expr):
         return sum(self.rec(child) for child in expr.children) * Interval(1 - MachineError(), 1 + MachineError())
@@ -27,6 +27,10 @@ class IntervalMapper(ErrorMapper):
 
     def map_quotient(self, expr):
         return (self.rec(expr.numerator) / self.rec(expr.denominator)) * Interval(1 - MachineError(), 1 + MachineError())
+
+    # TODO : Constants can also introduce rounding error
+    def map_interval(self, expr):
+        return expr
 
 
 class AffineMapper(ErrorMapper):

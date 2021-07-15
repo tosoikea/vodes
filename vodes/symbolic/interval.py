@@ -103,6 +103,9 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 lexpr = l
                 rexpr = r
 
+                print(f'L : {l}')
+                print(f'R : {r}')
+
                 if isinstance(l, BoundedExpression):
                     bound = bound.intersect(l.bound)
                     lexpr = l.expr
@@ -396,7 +399,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         Returns:
             __intersections: A 3D array of intersections. [i][j]=[x1,x2] -> The function i (position within fs) intersects the function j at the values x1,x2 within the boundary.
         """
-        intersections = [[[]] * len(fs)] * len(fs)
+        intersections = [[[] for j in range(len(fs))] for i in range(len(fs))]
 
         for i in range(0, len(fs)):
             for j in range(0, len(fs)):
@@ -495,7 +498,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         """Evaluate the maximum function within the given boundary."""
         return self.__extrema_eval(fs, b, intersections, order=lambda a, b: a > b)
 
-    def __next_eval(self, f: int, intersections: list, b: int):
+    def __next_eval(self, f: int, intersections: list, b: Boundary):
         """Determine which functions are where to be evaluated next.
 
         Args:
@@ -512,22 +515,22 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         res = [[], None, None]
 
         for i in range(len(intersections[f])):
-            xs = [x for x in intersections[f][i] if x > b]
+            xs = [x for x in intersections[f][i] if b.contains(x)]
 
             if len(xs) == 0:
                 continue
 
             if len(res[0]) == 0 or res[1] > xs[0]:
-                res = ([i], xs[0])
+                res = [[i], xs[0], None]
             elif res[1] == xs[0]:
                 res[0].append(i)
 
         for i in range(len(res[0])):
-            xs = [x for x in intersections[res[0][0]][i] if x > b]
+            # closest intersection, after current intersection
+            xs = [x for x in intersections[res[0][0]][i] if b.contains(x) and x > res[1]]
 
             if len(xs) == 0:
                 continue
-
             if res[2] is None or res[2] > xs[0]:
                 res[2] = xs[0]
 
@@ -537,12 +540,12 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         """Evaluate the extremas (e.g. minima, maxima) of the given functions within the boundary and return a list of them with their respective boundary."""
         res = []
         extrema = None
-        min_b = None
 
         # (3) Determine possible switches of min/max based on intersections
+        min_bl = b.lower
+        max_bl = b.upper
+
         while True:
-            min_bl = b.lower
-            max_bl = b.upper
             candidates = []
 
             if extrema is None:
@@ -550,12 +553,17 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                     item for sublist in intersections for subsublist in sublist for item in subsublist]
 
                 if len(flat_intersections) > 0:
+                    # Evaluate up until intersection
                     max_bl = BoundedValue(
-                        value=min(flat_intersections), open=False)
+                        value=min(flat_intersections), open=True)
 
-                candidates = fs
+                candidates = [i for i in range(len(fs))]
             else:
-                e_next = self.__next_eval(extrema, intersections, min_b)
+                e_next = self.__next_eval(extrema, intersections, Boundary(
+                    lower=min_bl,
+                    # We start by anticipating the range to go till the end
+                    upper=b.upper
+                ))
 
                 # No more intersections to handle, minimum stays minimum
                 if len(e_next[0]) == 0:
@@ -563,16 +571,33 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
 
                 candidates = e_next[0]
 
-            extrema = eval(candidates, Boundary(
+                if e_next[2] is None:
+                    # We evaluate until the upper boundary, as no more interesting intersection is given
+                    max_bl = b.upper
+                else:
+                    # We evaluate up until the next intersection
+                    max_bl = BoundedValue(
+                        value = e_next[2],
+                        open = True
+                    )
+
+            print(f'Evaluating {candidates} from {min_bl} to {max_bl}')
+            extrema = eval([fs[i] for i in candidates], Boundary(
                 lower=min_bl,
                 upper=max_bl
             ), intersections)
 
             res.append(
-                (extrema, min_bl)
+                (candidates[extrema], min_bl)
             )
 
-            min_b = min_bl.value
+            print(f'Extrema : {fs[candidates[extrema]]} from {min_bl} to {max_bl}')
+
+            # Start from intersection (including)
+            min_bl = BoundedValue(
+                value = max_bl.value,
+                open = False
+            )
 
         return res
 
@@ -599,12 +624,16 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
     def __sint(self, pfs:list, b:Boundary):
         """Determine the upper and lower bound of the symbolic interval and return it."""
         fs = [PymbolicToSympyMapper()(f) for f in pfs]
+        print(f"Symbolic Interval Evaluation : {fs}")
 
         # (1) Determine intersection for possible min/max switch
         intersections = self.__intersections(fs,b)
+        print(f'Intersections : {intersections}')
 
         min_res = self.__analysis(self.__min_eval, b, intersections, fs)
+        print(f'Minima : {min_res}')
         max_res = self.__analysis(self.__max_eval, b, intersections, fs)
+        print(f'Maxima : {max_res}')
 
         # Convert Bounded Values to Boundaries
         min_res_bounded = self.__bound_result(min_res,b)

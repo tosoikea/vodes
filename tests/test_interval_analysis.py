@@ -4,6 +4,7 @@
 
 import math
 from random import randrange
+from vodes.symbolic.interval import Interval
 from pymbolic.interop.sympy import PymbolicToSympyMapper
 
 from pymbolic.primitives import Sum
@@ -69,6 +70,26 @@ def test_iv_symbolic_1():
     })
 
     err = symbols('e')
-    expected = 2*err**2 + 12*err
+    # 20e + 10e²
+    expected = 20*err + 10*err**2
 
     __assert_equation(actual, expected)
+    
+def test_iv_symbolic_2():
+    # Arrange
+    x = var("x")
+    p = x + 20
+    xv = 10
+
+    # Act
+    ia = IntervalAnalysis(p)
+    actual = ia.absolute(context={
+        "x": xv
+    })
+
+    err = symbols('e')
+    # 40e + 10e²
+    expected = 40*err + 10*err**2
+
+    __assert_equation(actual, expected)
+

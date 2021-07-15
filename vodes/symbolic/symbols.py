@@ -113,7 +113,7 @@ class BoundedExpression(Expression):
 
 class BoundedExpressionStringifyMapper(StringifyMapper):
     def map_bounded_expression(self, expr, enclosing_prec, *args, **kwargs):
-        return f'[{expr.bound},{expr.expr}]'
+        return f'B({expr.bound},{expr.expr})'
 
 class BoundedVariable(Variable):
     init_arg_names = ("boundary","name",)
