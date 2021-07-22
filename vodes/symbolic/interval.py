@@ -23,6 +23,7 @@ from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
 
 from sympy import solve, im, simplify, S, Eq
 from typing import List
+import logging
 
 ##
 # src : https://link.springer.com/content/pdf/10.1007/3-540-36599-0_7.pdf
@@ -92,6 +93,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         assert(not context is None)
         assert(symbol)
 
+        self._logger = logging.getLogger(__name__)
         self._context = context
         self._symbol = symbol
 
@@ -103,9 +105,6 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 bound = self._symbol.bound
                 lexpr = l
                 rexpr = r
-
-                #print(f'L : {l}')
-                #print(f'R : {r}')
 
                 if isinstance(l, BoundedExpression):
                     bound = bound.intersect(l.bound)
@@ -137,7 +136,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         res = None
         # we do not substitute the free symbol
-        if not str(self._symbol.name) in self._context and self._symbol == expr:
+        if not str(self._symbol.name) in self._context and self._symbol.name == expr.name:
             res = Interval(expr)
         else:
             res = EvaluationMapper(context=self._context)(expr)
@@ -156,7 +155,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             ]
         )
 
-        #print(f'{expr} -> {list(map(str,res))}')
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
     def map_product(self, expr:Product) -> List[Expression]:
@@ -166,7 +165,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             ]
         )
 
-        #print(f'{expr} -> {list(map(str,res))}')
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
     def map_quotient(self, expr:Quotient) -> List[Expression]:
@@ -176,7 +175,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self.rec(expr.denominator)
         )
 
-        #print(f'{expr} -> {list(map(str,res))}')
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
     def map_power(self, expr:Power) -> List[BoundedExpression]:
@@ -187,7 +186,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self.rec(expr.exponent)
         )
 
-        #print(f'{expr} -> {list(map(str,res))}')
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
     def map_interval(self, expr:Interval) -> List[BoundedExpression]:
@@ -611,7 +610,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                         open = True
                     )
 
-            #print(f'Evaluating {candidates} from {min_bl} to {max_bl}')
+            self._logger.debug(f'Evaluating {candidates} from {min_bl} to {max_bl}')
             extrema = eval([fs[i] for i in candidates], Boundary(
                 lower=min_bl,
                 upper=max_bl
@@ -621,7 +620,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                 (candidates[extrema], min_bl)
             )
 
-            #print(f'Extrema : {fs[candidates[extrema]]} from {min_bl} to {max_bl}')
+            self._logger.debug(f'Extrema : {fs[candidates[extrema]]} from {min_bl} to {max_bl}')
 
             # Start from intersection (including)
             min_bl = BoundedValue(
@@ -664,16 +663,16 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
     def __sint(self, pfs:list, b:Boundary):
         """Determine the upper and lower bound of the symbolic interval and return it."""
         fs = [PymbolicToSympyMapper()(f) for f in pfs]
-        #print(f"Symbolic Interval Evaluation : {fs}")
+        self._logger.debug(f"Symbolic Interval Evaluation : {fs}")
 
         # (1) Determine intersection for possible min/max switch
         intersections = self.__intersections(fs,b)
-        #print(f'Intersections : {intersections}')
+        self._logger.debug(f'Intersections : {intersections}')
 
         min_res = self.__analysis(self.__min_eval, b, intersections, fs)
-        #print(f'Minima : {min_res}')
+        self._logger.debug(f'Minima : {min_res}')
         max_res = self.__analysis(self.__max_eval, b, intersections, fs)
-        #print(f'Maxima : {max_res}')
+        self._logger.debug(f'Maxima : {max_res}')
 
         # Convert Bounded Values to Boundaries
         min_res_bounded = self.__bound_result(min_res,b)
@@ -699,8 +698,8 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                     )
                 )
 
-        print(f"_sint: {list(map(str,pfs))}")
-        print(f"min: {min_res_bounded} , max: {max_res_bounded}")
+        self._logger.info(f"_sint: {list(map(str,pfs))}")
+        self._logger.info(f"min: {min_res_bounded} , max: {max_res_bounded}")
 
         return result
 
@@ -715,7 +714,6 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         return self.__sint(pfs, b)
 
     def __convert_to_positive(self, pf, b:Boundary):
-        print(pf)
         result = []
 
         f = PymbolicToSympyMapper()(pf)

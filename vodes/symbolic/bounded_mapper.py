@@ -54,7 +54,7 @@ class BoundedMapper(EvaluationMapper):
 
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         # we do not substitute the free symbol
-        if not (self._symbol.name in self.context) and self._symbol == expr:
+        if not (self._symbol.name in self.context) and self._symbol.name == expr.name:
             return BoundedExpression(
                 expr,
                 boundary=self._symbol.bound

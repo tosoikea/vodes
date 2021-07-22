@@ -3,6 +3,7 @@ from typing import List
 from pymbolic.primitives import Expression, Variable
 from sys import intern
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
+from vodes.symbolic.power import Power
 
 class BoundedValue:
     def __init__(self, value, open:bool):
@@ -178,12 +179,22 @@ class BoundedVariable(Variable):
         return self.__boundary
 
 class MachineError(BoundedVariable):
-    def __init__(self):
+    def __init__(self,min_precision:int=1,max_precision:int=None):
+        assert (min_precision > 0)
+        max_eps = Power(base=2, exponent=-min_precision)
+        
+        min_eps = 0
+        if not max_precision is None:
+            assert (max_precision >= min_precision)
+            min_eps = Power(base=2, exponent=-max_precision)
+
         super().__init__(
-            name="e",
+            name="eps",
             boundary=Boundary(
-                lower=BoundedValue(value=0,open=True),
-                upper=BoundedValue(value=1,open=True)
+                # open if value unreachable
+                lower=BoundedValue(value=min_eps,open=min_eps == 0),
+                # open if value unreachable
+                upper=BoundedValue(value=max_eps,open=max_eps == 1)
             )
         )
 

@@ -51,7 +51,7 @@ def test_multiple_intersections1():
     actual = EIE(context={}, symbol=MachineError())(expr)
 
     # Assert
-    err = symbols('e')
+    err = symbols('eps')
     intersection = sqrt(5)/5
 
     exp_equations = [
