@@ -1,13 +1,10 @@
 from abc import ABC, abstractmethod
 import logging
 import matplotlib.pyplot
-
 #
 from vodes.ode.problem import Problem
-from vodes.error.roundoff import Roundoff
 from numpy.core.function_base import linspace
-from sympy import pprint, lambdify, Symbol, Matrix
-from mpmath import mp
+from sympy import pprint, lambdify
 
 class Solver(ABC):
     # The symbolic encoding of the solver. MUST be initiated in the child classes

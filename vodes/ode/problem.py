@@ -1,9 +1,5 @@
-from vodes.utils.expressions import convert_to_tree, pre_walk
-from vodes.utils.node import Node
-from sympy import symbols, pprint, shape, Matrix
-from sympy.simplify.traversaltools import use
+from sympy import symbols, shape
 from sympy.tensor.functions import NoShapeError
-from sympy.matrices.expressions.matexpr import MatrixSymbol
 
 class Problem:
     ##

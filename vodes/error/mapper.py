@@ -1,5 +1,6 @@
-from vodes.symbolic.symbols import MachineError
+from vodes.symbolic.symbols import MachineError, Noise
 from vodes.symbolic.interval import Interval
+from vodes.symbolic.power import Power
 from pymbolic.mapper import RecursiveMapper
 
 class ErrorMapper(RecursiveMapper):
@@ -29,22 +30,72 @@ class IntervalMapper(ErrorMapper):
         return (self.rec(expr.numerator) / self.rec(expr.denominator)) * Interval(1 - MachineError(), 1 + MachineError())
 
     def map_power(self, expr):
-        return (self.rec(expr.base) ** self.rec(expr.exponent)) * Interval(1 - MachineError(), 1 + MachineError())
+        return Power(self.rec(expr.base), self.rec(expr.exponent)) * Interval(1 - MachineError(), 1 + MachineError())
 
     # TODO : Constants can also introduce rounding error
     def map_interval(self, expr):
         return expr
 
-
 class AffineMapper(ErrorMapper):
+    def __init__(self):
+        super().__init__()
+
+        self.__id = 0
+        self.__noises = []
+        self.__exact = {}
+
+        self.__ids = {}
+
+    @property
+    def noises(self):
+        """Get the noise variables that were created using this mapper"""
+        return self.__noises
+
+    @property
+    def exact(self):
+        """Get the substitutions of all created noise variables to zero"""
+        return self.__exact
+
+    @property
+    def ids(self):
+        """Get the mapping from ids to expressions"""
+        return self.__ids
+
+
+    def __error(self, expr):
+        expr_id = str(expr)
+
+        if not expr_id in self.__ids:
+            # TODO : This would need to be tweaked in case of parallelization
+            t = self.__id
+            self.__id = self.__id + 1
+
+            self.__ids[expr_id] = t
+
+        eps = Noise(index=self.__ids[expr_id])
+
+        if not eps.name in self.__exact:
+            self.__noises.append(eps)
+            self.__exact[eps.name] = 0
+
+        return eps
+
     def map_variable(self, expr):
-        pass
+        return expr * (1 + self.__error(expr))
 
     def map_sum(self, expr):
-        pass
+        return sum(self.rec(child) for child in expr.children) * (1 + self.__error(expr))
 
     def map_product(self, expr):
-        pass
+        from pytools import product
+        return product(self.rec(child) for child in expr.children) * (1 + self.__error(expr))
 
     def map_quotient(self, expr):
-        pass
+        return (self.rec(expr.numerator) / self.rec(expr.denominator)) * (1 + self.__error(expr))
+
+    def map_power(self, expr):
+        return Power(self.rec(expr.base),self.rec(expr.exponent)) * (1 + self.__error(expr))
+
+    # TODO : Constants can also introduce rounding error
+    def map_interval(self, expr):
+        return expr

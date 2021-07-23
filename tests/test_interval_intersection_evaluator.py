@@ -18,20 +18,9 @@ from vodes.symbolic.interval import ExactIntersectionEvaluator as EIE, Interval
 from pymbolic import var
 from interval import interval, inf, imath
 
+# Utility functions for comparison
+from tests.utils import assert_bounded_iv_equations
 
-def __assert_bounds(actual, expected):
-    assert len(actual) == len(expected)
-
-    for i in range(len(actual)):
-        assert isinstance(actual[i],BoundedExpression)
-        assert actual[i].bound == expected[i]
-
-def __assert_equations(actual,bounds,equations):
-    __assert_bounds(actual, bounds)
-
-    for i in range(len(actual)):
-        assert expand(PymbolicToSympyMapper()(actual[i].expr.low)) == equations[i][0]
-        assert expand(PymbolicToSympyMapper()(actual[i].expr.up)) == equations[i][1]
 
 
 def test_multiple_intersections1():
@@ -51,23 +40,31 @@ def test_multiple_intersections1():
     actual = EIE(context={}, symbol=MachineError())(expr)
 
     # Assert
-    err = symbols('eps')
     intersection = sqrt(5)/5
 
-    exp_equations = [
-        [
+    expected = [
+        BoundedExpression(
             # [20e^3 - 10e^2, 20e^3 - 20e^2 + 2]
-            20*err**3 - 10*err**2, 20*err**3 - 20*err**2 + 2
-            ],
-        [
+            expression=Interval(
+                lower=20*e**3 - 10*e**2,
+                upper=20*e**3 - 20*e**2 + 2
+            ),
+            boundary=Boundary(
+                lower=MachineError().bound.lower,
+                upper=BoundedValue(value=intersection,open=True)
+            )
+        ),
+        BoundedExpression(
             # [20e^3 - 20e^2 + 2, 20e^3 - 10e^2]
-            20*err**3 - 20*err**2 + 2, 20*err**3-10*err**2
-            ]
-        ]
+            expression=Interval(
+               lower=20*e**3 - 20*e**2 + 2,
+               upper= 20*e**3-10*e**2
+            ),
+            boundary=Boundary(
+                lower=BoundedValue(value=intersection, open=False),
+                upper=MachineError().bound.upper
+            )
+        )
+    ]
 
-    exp_bounds = [
-        Boundary(lower=MachineError().bound.lower,upper=BoundedValue(value=intersection,open=True)),
-        Boundary(lower=BoundedValue(value=intersection, open=False),upper=MachineError().bound.upper),
-        ]
-
-    __assert_equations(actual=actual, bounds=exp_bounds, equations=exp_equations)
+    assert_bounded_iv_equations(actual=actual, expected=expected)

@@ -4,13 +4,12 @@ class Power(PE):
     def __compare_power(self, other, f):
         self_val = self.base ** self.exponent
 
-        if isinstance(other, PE):
-            # a) same bases -> ordering via exponent
-            # b) base and exponent ordered identically -> ordering via exponent
-            if self.base == other.base or f(self.base, other.base) == f(self.exponent, other.exponent):
+        if isinstance(other,PE):
+            # a) same base => ordering via exponent
+            if self.base == other.base:
                 return f(self.exponent, other.exponent)
-            # c) exponent and base ordering differentiating
             else:
+            # b) differentiating base
                 return f(self_val, other.base ** other.exponent)
         else:
             return f(self_val, other)

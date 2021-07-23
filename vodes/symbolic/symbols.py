@@ -122,7 +122,7 @@ class Boundary:
         l = self.lower
 
         for b in other:
-            if l < b.lower:
+            if l.value < b.lower.value:
                 res.append(
                     Boundary(
                         lower=l,
@@ -198,6 +198,18 @@ class MachineError(BoundedVariable):
             )
         )
 
+class Noise(BoundedVariable):
+    def __init__(self,index:str):
+        super().__init__(
+            name=f'eps_{index}',
+            boundary=Boundary(
+                # open if value unreachable
+                lower=BoundedValue(value=-MachineError(),open=False),
+                # open if value unreachable
+                upper=BoundedValue(value=MachineError(),open=False)
+            )
+        )
+
 class DummyVariable(BoundedVariable):
     def __init__(self):
         super().__init__(
@@ -207,24 +219,3 @@ class DummyVariable(BoundedVariable):
                 upper=BoundedValue(value=1,open=True)
             )
         )
-
-# TODO : Move to BoundedVariable
-class Noise(Variable):
-    glb_index = 0
-
-    def __init__(self,index=None):
-        # TODO : Find better way for unique index -> overflow, race condition etc.
-        if index is None:
-            index = Noise.glb_index
-            Noise.glb_index += 1
-
-        self.index = index
-        super().__init__(f"e_{index}")
-        
-    def __lt__(self, other):
-        if other > 1:
-            return True
-        elif other <-1:
-            return False
-        else:
-            return NotImplemented

@@ -4,19 +4,21 @@ from numpy.core.function_base import linspace
 from vodes.symbolic.absolute import Abs
 from vodes.symbolic.maximum import Max
 
+from pymbolic.mapper.substitutor import SubstitutionMapper, make_subst_func
 from pymbolic.mapper.evaluator import EvaluationMapper
-from pymbolic.interop.sympy import PymbolicToSympyMapper
+from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
 from vodes.symbolic.symbols import BoundedExpression, MachineError
-from vodes.symbolic.interval import ExactIntersectionEvaluator
+from vodes.symbolic.interval import ExactIntersectionEvaluator, Interval
+from vodes.symbolic.power import Power
 
-from vodes.error.mapper import IntervalMapper
+from vodes.error.mapper import AffineMapper, IntervalMapper
 from vodes.symbolic.binary_mapper import BinaryMapper as BM
 from pymbolic.primitives import Expression
-from pymbolic.functions import fabs
-from sympy import lambdify
+from sympy import lambdify, diff
 from matplotlib import pyplot
 from math import ceil
 import logging
+from functools import reduce
 
 class Analysis(ABC):
     """Superclass for the concise implementations of roundoff error analysis for a symbolic problem.
@@ -110,6 +112,103 @@ class IntervalAnalysis(Analysis):
                 max_precision=max_precision
                 )
             )(err)
+
+        self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')
+
+        return self._absolute
+
+class TaylorAnalysis(Analysis):
+    """Class implementing roundoff error analysis on the basis of taylor expansions
+    
+    Args:
+        problem (Expression): The problem, that is to be analyzed for its roundoff errors.
+
+    Attributes:
+        _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
+        __expr (Expression): The problem with appropriate error terms injected.
+    """
+    def __init__(self, problem: Expression):
+        super().__init__(problem)
+        
+        self.__create_error_term()
+
+
+    def __create_error_term(self):
+        # Mapper exposes all created noise variables
+        self.__mapper = AffineMapper()
+
+        self.__expr = self.__mapper(self._problem)
+        sym_expr = PymbolicToSympyMapper()(self.__expr)
+
+        self._logger.info(f'Affine Expression : {sym_expr}')
+        self._logger.debug(f'Mappings : {self.__mapper.ids}')
+
+        ##
+        # Absolute Error := | o(f(x)) - f(x) |
+        # Affine form with noise variables to model rounded operations
+        #                <= | f(x,e) - f(x) |
+        # Taylor relative to e at e = (0,...,0)
+        # T_1 : first order term
+        # R_1 : first order error term
+        #                <= | f(x,0) + T_1(f,x,0) + R_1(f,x,p) - f(x) |
+        # f(x,0) = f(x)
+        #                 = | T_1(f,x,0) + R_1(f,x,p) |
+        ##
+
+        # We do not multiply with noise (* noise), as we approximate it later, by MachineError
+        self.__t1 = SympyToPymbolicMapper()(
+            reduce(lambda x,y: x + y, [
+                    diff(sym_expr, noise.name).subs(self.__mapper.exact) for noise in self.__mapper.noises
+                ]
+            )
+        )
+        self._logger.info(f'T1 : {self.__t1}')
+
+        ##
+        # Taylor’s Inequality :
+        # M >= | f^(n+1)(x) | for all x \in (- \eps, + \eps) => | R_n(x) | <= M / (n+1)! * | x - a |^(n+1)
+        #
+        # R_1(x) = (x - a)^T / 2 * Hf(a)(x - a)
+        #
+        # d^2 f / de^2  = \sum_{i=0,j=0} (\partial^2 f) / (\partial e_i \partial e_j) (x,e)
+        # https://mathinsight.org/taylors_theorem_multivariable_introduction
+        #
+        # Idea : Exact Remainder, Compute Intervall for noises, upper bound is M
+        ##
+
+        # We do not multiply with noises (* e_i * e_j), as we approximate it later, by MachineError
+        self.__r1 = SympyToPymbolicMapper()(
+            reduce(lambda x,y: x + y, [
+                    diff(sym_expr,e_i.name,e_j.name) for e_i in self.__mapper.noises for e_j in self.__mapper.noises
+                ]
+            )
+        )
+        self._logger.info(f'R1 : {self.__r1}')
+
+
+
+    def absolute(self, context: dict,min_precision:int,max_precision:int):
+        eps = MachineError(min_precision=min_precision,max_precision=max_precision)
+
+        subs = {}
+        for key in self.__mapper.exact:
+            subs[key] = Interval(-eps, eps)
+
+        subs_mapper = SubstitutionMapper(subst_func=make_subst_func(subs))
+        eps_r1 = subs_mapper(self.__r1)
+
+        
+        ##
+        # The approximative error term consists no machine error
+        ##
+        t_t1 = EvaluationMapper(context=context)(self.__t1)
+        err = Max(eps * Abs(t_t1) + Power(eps,2) * Abs(eps_r1))
+        self._logger.info(f'Approximative Error : {err}')
+
+        self._absolute = ExactIntersectionEvaluator(
+            context=context,
+            symbol=eps
+        )(err)
 
         self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')
 

@@ -12,12 +12,13 @@ from vodes.symbolic.maximum import Max
 from sympy.series.limits import limit
 from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
 from vodes.symbolic.absolute import Abs
+from vodes.symbolic.power import Power
 from vodes.symbolic.bounded_mapper import BoundedMapper
 from pymbolic.mapper.evaluator import EvaluationMapper
 
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.polynomial import Polynomial
-from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product, Power, is_constant
+from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product, is_constant
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
 from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
 
@@ -129,24 +130,33 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         return res
 
     def map_constant(self, expr) -> List[Interval]:
-        return [
-            Interval(expr)
-        ]
-  
-    def map_variable(self, expr:Variable) -> List[BoundedExpression]:
-        res = None
-        # we do not substitute the free symbol
-        if not str(self._symbol.name) in self._context and self._symbol.name == expr.name:
-            res = Interval(expr)
-        else:
-            res = EvaluationMapper(context=self._context)(expr)
-
-        return [
+        res = [
             BoundedExpression(
-                Interval(res),
+                Interval(expr),
                 boundary=self._symbol.bound
             )
         ]
+
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        return res
+  
+    def map_variable(self, expr:Variable) -> List[BoundedExpression]:
+        res = None
+        # vexpr do not substitute the free symbol
+        if not str(self._symbol.name) in self._context and self._symbol.name == expr.name:
+            vexpr = Interval(expr)
+        else:
+            vexpr = Interval(EvaluationMapper(context=self._context)(expr))
+
+        res = [
+            BoundedExpression(
+                expression=vexpr,
+                boundary=self._symbol.bound
+            )
+        ]
+
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        return res
 
     def map_sum(self, expr:Sum) -> List[Expression]:
         res = reduce(
@@ -281,7 +291,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
         # TODO : to be handled properly
         # 0 \not in Y
-        return self._imul(l, Interval(1/rmin, 1/rmax), b)
+        return self._imul(l, Interval(1/rmax, 1/rmin), b)
         # rmin = 0, rmax > 0
         # [1/rmax,\infty)
         # ...
@@ -303,6 +313,8 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         rmin, rmax = r.low, r.up
 
         # Degenerate intervals
+        print(l)
+        print(r)
         if lmin == lmax:
             res = Interval(lmin * rmin, lmin * rmax)
         elif rmin == rmax:
@@ -662,8 +674,8 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
 
     def __sint(self, pfs:list, b:Boundary):
         """Determine the upper and lower bound of the symbolic interval and return it."""
+        self._logger.debug(f"Symbolic Interval Evaluation : {list(map(str,pfs))}")
         fs = [PymbolicToSympyMapper()(f) for f in pfs]
-        self._logger.debug(f"Symbolic Interval Evaluation : {fs}")
 
         # (1) Determine intersection for possible min/max switch
         intersections = self.__intersections(fs,b)
@@ -799,6 +811,17 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         """Determine where the function is positive with the given boundary, may return empty list"""
         return b.difference(self.__get_negative(f,b))
 
+
+
+    def _spow_inequalities(self, pfs:list, b:Boundary):
+        # The list is of the format [a^x,a^y,...]
+
+        # TODO Try to determine min, max based on inequalities
+        
+        pass
+
+
+
     def _spow(self, l:Interval, r:Interval, b:Boundary):
         if not is_constant(r.low):
             raise ValueError("The ExactIntersectionEvaluator does not support symbolic exponents")
@@ -806,14 +829,21 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         if not (r.low == r.up):
             raise ValueError("The ExactIntersectionEvaluator does not support non degenerate interval exponents")
 
+        pfs = []
+
         if r.low < 0:
-            raise ValueError("The ExactIntersectionEvaluator does not support negative exponents")
+            pfs = [
+                Power(base=l.low,exponent=(-1) * r.low),
+                Power(base=l.up,exponent=(-1) * r.low)
+            ]
+        else:
+            pfs = [
+                Power(base=l.low,exponent=r.low),
+                Power(base=l.up,exponent=r.low)
+            ]
 
-        pfs = [
-            l.low ** r.low,
-            l.up ** r.low
-        ]
 
+        res = []
 
         # We know a (global) extrema is at l == 0
         if r.low % 2 == 0:
@@ -822,7 +852,6 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
 
             # l.low < 0 <= l.up
             if len(lns) != 0 and len(uns) != 0:
-                res = []
 
                 cbs = [ln.intersect(un) for ln in lns for un in uns]
                 bns = [bn for bn in cbs if bn is not None]
@@ -836,14 +865,19 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
 
                 # l.low < 0 <= l.up case
                 for bn in bns:
-                    # TODO : Only max is to be determined
+                    # TODO : Only max to be determined
                     res.extend(self.__sint(pfs=[
                         pfs[0],
                         0,
                         pfs[1]
                     ], b=bn))
-
-
-                return res
         
-        return self.__sint(pfs=pfs, b=b)
+        if len(res) == 0:
+            res = self.__sint(pfs=pfs, b=b)
+        
+        if r.low < 0:
+            self._logger.debug(f'Encountered negative exponent, converting using division.')
+            converted_res = [self._idiv(Interval(1),bexpr.expr,b=bexpr.bound) for bexpr in res]
+            res = [item for sublist in converted_res for item in sublist]
+            
+        return res

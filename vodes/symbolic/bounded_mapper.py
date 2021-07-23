@@ -3,6 +3,7 @@
 from functools import reduce
 from typing import List
 from vodes.symbolic.symbols import BoundedExpression, BoundedVariable
+from vodes.symbolic.power import Power
 from pymbolic.mapper.evaluator import EvaluationMapper
 from pymbolic.primitives import Expression, Quotient, Power, Variable, Sum, Product, is_constant
 
@@ -50,7 +51,7 @@ class BoundedMapper(EvaluationMapper):
         return self._bop(l,r,b,lambda a,b:a/b)
 
     def _bpow(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:a**b)
+        return self._bop(l,r,b,lambda a,b:Power(a,b))
 
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         # we do not substitute the free symbol

@@ -1,5 +1,5 @@
 from vodes.ode.solver import Solver
-from sympy import symbols, pprint, MatrixSymbol, shape, simplify
+from sympy import symbols, MatrixSymbol, shape
 from abc import ABC, abstractmethod
 
 class RK(Solver,ABC):

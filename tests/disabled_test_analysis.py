@@ -9,7 +9,7 @@ from vodes.symbolic.symbols import BoundedExpression, BoundedVariable, DummyVari
 from vodes.symbolic.interval import Interval
 from pymbolic import var
 from mpmath import mpf,mp
-from sympy import lambdify, pprint
+from sympy import Pow
 
 def calculate(f,prec):
     t = mp.prec
@@ -23,16 +23,18 @@ def calculate(f,prec):
 @pytest.fixture
 def analyses():
     from vodes.error.analysis import IntervalAnalysis as IA
+    from vodes.error.analysis import TaylorAnalysis as TA
     return [
-        lambda p : IA(problem=p)
+        lambda p : IA(problem=p),
+        lambda p : TA(problem=p)
     ]
 
 def __assert_equations(f,bexprs):
     # assume ~ 113 prec is exact (quadruple)
     expected = calculate(f,113)
 
-    # evaluate up to 30 precisions
-    ps = [randrange(113) for i in range(randrange(30))]
+    # evaluate up to 30 precisions for half to double precision
+    ps = [randrange(1,53) for i in range(randrange(30))]
 
     for p in ps:
         rounded = calculate(f,p)
@@ -49,10 +51,8 @@ def __assert_equations(f,bexprs):
 
             if not (bexpr.bound.contains(eps)):
                 continue
-
-            f_actual_error = lambdify('eps', PymbolicToSympyMapper()(bexpr.expr))
-            actual_error = f_actual_error(eps)
-
+            
+            actual_error = PymbolicToSympyMapper()(bexpr.expr).subs("eps", Pow(2,-p))
             print (f'Actual : {actual_error} (prec : {p})')
             break
 
@@ -123,15 +123,29 @@ def _bounds_test_2(analyses, xv:int, c:int):
             min_precision = min_prec
         )
 
-        # Assert-8.964731982496851e+17 + (1 + e)**3*(779.2 + (1 + e)**4*(3895 + 3896*e)**5))
+        # Assert
         __assert_equations(
             f = f,
             bexprs=bexprs
         )
-
 
 def test_bounds2(analyses):
     c = randrange(start=1,stop=10)
     xv = randrange(200)
 
     _bounds_test_2(analyses=analyses,xv=xv,c=c)
+    
+def test_bounds2a(analyses):
+    """This test case was problematic in earlier iterations"""
+    c = 5
+    xv = 36
+
+    _bounds_test_2(analyses=analyses,xv=xv,c=c)
+
+def test_bounds2b(analyses):
+    """This test case was problematic in earlier iterations (NoConvergence)"""
+    c = 2
+    xv = 60
+
+    _bounds_test_2(analyses=analyses,xv=xv,c=c)
+

@@ -240,3 +240,28 @@ def test_iv_symbolic_6():
             )
             ]
         )
+
+def test_iv_symbolic_7():
+    """Test case to validate edge case, where expression is constant"""
+    # Arrange
+    p = 0
+
+    max_prec = 113
+    min_prec = 11
+
+    # Act
+    ia = IntervalAnalysis(p)
+
+    actual = ia.absolute(
+        context={},
+        min_precision=min_prec,
+        max_precision=max_prec
+        )    
+        
+    # Assert
+    exp_bounds = [
+        Boundary(lower=MachineError(max_precision=max_prec).bound.lower,upper=MachineError(min_precision=min_prec).bound.upper),
+        ]
+    exp_equations = [0]
+
+    __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
