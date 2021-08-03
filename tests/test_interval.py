@@ -314,7 +314,7 @@ def test_interval_pow3(evaluators):
         assert_bounded_iv_equations(a,e)
 
 
-def test_interval_pow3(evaluators):
+def test_interval_pow4(evaluators):
     # Arrange
     u1 = 2 #Even exponent
     x = var("x") 

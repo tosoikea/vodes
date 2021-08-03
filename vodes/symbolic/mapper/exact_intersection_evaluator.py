@@ -11,9 +11,7 @@ from pymbolic.mapper.differentiator import DifferentiationMapper as DM
 from pymbolic.interop.sympy import SympyToPymbolicMapper
 
 # Symbolic library for intersections, solving...
-from sympy import S, Interval as Domain
 from sympy.series.limits import limit
-from sympy.solvers import solveset
 
 class DifferentiationMapper(DM):
     def map_variable(self, expr:Variable, *args):
@@ -29,6 +27,27 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
     def __init__(self, context: dict, symbol: Variable):
         super().__init__(context=context, symbol=symbol)
 
+    def __solve(self, f, b:Boundary=None):
+        from sympy.solvers import solveset
+        from sympy import im
+        res= []
+        xs = solveset(f)
+
+        if not xs.is_FiniteSet:
+            self._logger.info(f'{f} has no unique solution. Handling, as if no solution present.')
+            return res
+
+        for x in xs:
+            #TODO : Make real/complex support a parameter choice
+            if im(x) != 0:
+                self._logger.debug(f'Dropping {x}.')
+                continue
+
+            if (b is None) or b.contains(x):
+                res.append(x)
+
+        return res
+
     def __intersection(self, f, g, b: Boundary):
         """Determine the real intersections of two functions for the given boundary. Intersections at the boundary values are ignored.
 
@@ -40,21 +59,16 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         Returns:
             __intersection: A (possibly empty) list of intersections between f and g.
         """
-        res = []
-
-        xs = solveset(
-            f-g,
-            domain=Domain(b.lower.value,b.upper.value,True,True)
+        res = self.__solve(
+            f=f-g,
+            b=Boundary(
+                lower=BoundedValue(value=b.lower.value, open=True),
+                upper=BoundedValue(value=b.upper.value, open=True)
+            )
         )
 
-        if not xs.is_FiniteSet:
-            #f=g
-            return res
-
-        for x in list(xs):
-            if b.contains(x):
-                # Allows equal handling of boundary and intersections
-                res.append(x)
+        print(res)
+    
         return res
 
     def __intersections(self, fs:list, b: Boundary):
@@ -498,6 +512,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         return res
 
     def _sboundary_sections(self, f_diff, f_low, f_up, b:Boundary):
+        from sympy import im
         res = [
             # (
             #   Boundary ( start, end ),
@@ -510,14 +525,8 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         ]
 
         # 1. Determine zero points
-        xs = solveset(
-            f_diff,
-            domain = S.Reals
-        )
-
-        if not xs.is_FiniteSet:
-            self._logger.warn(f'{f_diff} was not solvable symbolically. Assuming monotonicity.')
-            return res
+        # TODO : Evaluate constraint, if needed
+        xs = self.__solve(f = f_diff)
 
         # TODO : e.g. x^3 -> differentiation between global/local extrema required
         # TODO : Ensure sorting
@@ -533,9 +542,12 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
             self._logger.debug(f'Analyzing zero point {x}.')
 
             # i_low = x
-            xlows = solveset(
-                f_low - x,
-                domain=Domain(b.lower.value,b.upper.value,True,True)
+            xlows = self.__solve(
+                f=f_low-x,
+                b=Boundary(
+                    lower=BoundedValue(value=b.lower.value, open=True),
+                    upper=BoundedValue(value=b.upper.value, open=True)
+                )
             )
             
             lower_sections = self._sboundary_sections_from_intersections(
@@ -547,9 +559,12 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
             )
 
             # i_up = x
-            xups = solveset(
-                f_up - x,
-                domain=Domain(b.lower.value,b.upper.value,True,True)
+            xups = self.__solve(
+                f=f_up - x,
+                b=Boundary(
+                    lower=BoundedValue(value=b.lower.value, open=True),
+                    upper=BoundedValue(value=b.upper.value, open=True)
+                )
             )
 
             upper_sections = self._sboundary_sections_from_intersections(
@@ -559,6 +574,11 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                 extrema=x,
                 b=b
             )
+
+            print(xlows)
+            print(lower_sections)
+            print(xups)
+            print(upper_sections)
 
             # Merge with current res
             t_res = []
