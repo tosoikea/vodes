@@ -7,12 +7,14 @@ from vodes.symbolic.maximum import Max
 from pymbolic.mapper.substitutor import SubstitutionMapper, make_subst_func
 from pymbolic.mapper.evaluator import EvaluationMapper
 from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
-from vodes.symbolic.symbols import BoundedExpression, MachineError
-from vodes.symbolic.interval import ExactIntersectionEvaluator, Interval
+from vodes.symbolic.symbols import  MachineError
+from vodes.symbolic.interval import Interval
 from vodes.symbolic.power import Power
 
+from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator
+from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
+
 from vodes.error.mapper import AffineMapper, IntervalMapper
-from vodes.symbolic.binary_mapper import BinaryMapper as BM
 from pymbolic.primitives import Expression
 from sympy import lambdify, diff
 from matplotlib import pyplot

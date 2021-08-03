@@ -1,35 +1,28 @@
 #!/usr/bin/env python
 
 """Tests for `vodes.error` package."""
+import pytest
 
 from random import randrange
 from typing import List
 from vodes.symbolic.interval import Interval
-from pymbolic.interop.sympy import PymbolicToSympyMapper
 
-from pymbolic.primitives import Sum
 from sympy import sqrt
-from sympy.core.function import expand
-from sympy.core.numbers import E
-from sympy.core.symbol import symbols
-import pytest
 from vodes.symbolic.symbols import Boundary, BoundedValue, MachineError, BoundedExpression
-from vodes.symbolic.interval import ExactIntersectionEvaluator as EIE, Interval
-from pymbolic import var
-from interval import interval, inf, imath
+from vodes.symbolic.interval import Interval
+from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE
 
 # Utility functions for comparison
 from tests.utils import assert_bounded_iv_equations
-
 
 
 def test_multiple_intersections1():
     # Arrange
     e = MachineError()
 
-    ##20x^3 - 20^x2 + 2
+    ##10x^3 - 10x^2 + 1
     p1 = 10*e**3 - 10*e**2 + 1
-    ##20x^3 - 10x^2
+    ##10x^3 - 5x^2
     p2 = 10*e**3 - 5*e**2
 
     ## not a valid interval

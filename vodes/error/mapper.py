@@ -15,6 +15,9 @@ class ErrorMapper(RecursiveMapper):
     def map_constant(self, expr):
         return expr
 
+    def map_rational(self, expr):
+        return expr
+
 class IntervalMapper(ErrorMapper):
     def map_variable(self, expr):
         return Interval(expr - expr * MachineError(), expr + expr * MachineError())

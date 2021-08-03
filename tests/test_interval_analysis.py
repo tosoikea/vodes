@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import pytest
 """Tests for `vodes.error` package."""
 
 import math
@@ -7,17 +7,28 @@ from random import randrange
 
 from sympy.core.power import Pow
 from vodes.symbolic.interval import Interval
-from pymbolic.interop.sympy import PymbolicToSympyMapper
 
-from pymbolic.primitives import Power, Sum, Power
-from sympy.core.function import expand
-from sympy.core.numbers import E
+from pymbolic.primitives import Power, Quotient
 from sympy.core.symbol import symbols
 from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, MachineError
-import pytest
 from vodes.error.analysis import IntervalAnalysis
 from pymbolic import var
-from interval import interval, inf, imath
+from interval import interval
+
+from pymbolic.primitives import Expression
+
+
+def __assert_expressions(l,r):
+    from pymbolic.interop.sympy import PymbolicToSympyMapper
+    from sympy import simplify
+
+    if isinstance(l,Expression):
+        l = PymbolicToSympyMapper()(l)
+    
+    if isinstance(r, Expression):
+        r = PymbolicToSympyMapper()(r)
+
+    assert simplify(l-r) == 0
 
 def __bound(iv):
     b = max(abs(iv))
@@ -33,31 +44,28 @@ def __assert_equation(actual,expected):
     assert len(actual) == 1
     assert isinstance(actual[0],BoundedExpression)
 
-    actual_sym = PymbolicToSympyMapper()(actual[0].expr)
-    
-    assert expand(actual_sym) == expected
+    __assert_expressions(actual[0].expr, expected)
 
 def __assert_bounds(actual, expected):
     assert len(actual) == len(expected)
 
     for i in range(len(actual)):
         assert isinstance(actual[i],BoundedExpression)
-        assert actual[i].bound == expected[i]
+        __assert_expressions(actual[i].bound.lower.value, expected[i].lower.value)
+        __assert_expressions(actual[i].bound.upper.value, expected[i].upper.value)
+
+        assert actual[i].bound.lower.open == expected[i].lower.open
+        assert actual[i].bound.upper.open == expected[i].upper.open
 
 def __assert_equations(actual,bounds,equations):
     __assert_bounds(actual, bounds)
 
     for i in range(len(actual)):
-        assert expand(PymbolicToSympyMapper()(actual[i].expr)) == expand(equations[i])
-
-def __print_equations(actual):
-    for i in range(len(actual)):
-        assert isinstance(actual[i],BoundedExpression)
-
-        print(f"BOUND : {actual[i].bound}")
-        print(f"EXPR : {PymbolicToSympyMapper()(actual[i].expr)}")
+        __assert_expressions(actual[i].expr, equations[i])
 
 def test_iv_full_sub_1():
+    """Comparison of interval analysis with direct usage of interval library"""
+
     # Arrange
     x = var("x")
     p = x * randrange(20)
@@ -96,7 +104,7 @@ def test_iv_symbolic_1():
     max_precision=113)
 
     err = symbols('eps')
-    # 20e + 10e²
+    # 20e + 10e^2
     expected = 20*err + 10*err**2
 
     __assert_equation(actual, expected)
@@ -116,7 +124,7 @@ def test_iv_symbolic_2():
     max_precision=113)
 
     err = symbols('eps')
-    # 40e + 10e²
+    # 40e + 10e^2
     expected = 40*err + 10*err**2
 
     __assert_equation(actual, expected)
@@ -137,7 +145,7 @@ def test_iv_symbolic_3():
     max_precision=113)
 
     err = symbols('eps')
-    # 25e³+75e²+75e
+    # 25e^3+75e^2+75e
     expected = 25*err**3 + 75*err**2 + 75*err
 
     __assert_equation(actual, expected)
@@ -146,7 +154,7 @@ def test_iv_symbolic_4():
     # Arrange
     x = var("x")
     p = (x-1)
-    xv = Power(2,-1) * 3
+    xv = Quotient(3,2)
 
     # Act
     ia = IntervalAnalysis(p)
@@ -157,7 +165,9 @@ def test_iv_symbolic_4():
     max_precision=113)
 
     # Assert
-    b1 = Pow(3,-1)
+
+    #
+    b1 = Quotient(1,3)
     exp_bounds = [
         Boundary(lower=MachineError(max_precision=113).bound.lower,upper=BoundedValue(value=b1,open=True)),
         Boundary(lower=BoundedValue(value=b1, open=False),upper=MachineError(min_precision=1).bound.upper),
@@ -166,8 +176,8 @@ def test_iv_symbolic_4():
     err = symbols('eps')
     exp_equations = [
         # - 1/2 + (1.5e + 0.5)(1+e)
-        (-1) * Pow(2,-1) + (3 * Pow(2,-1) * err + Pow(2,-1)) * (1 + err),
-        (-1) * Pow(2,-1) + (3 * Pow(2,-1) * err + Pow(2,-1)) * (1 + err)
+        (-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err),
+        (-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err)
     ]
 
     __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
@@ -176,8 +186,7 @@ def test_iv_symbolic_5():
     # Arrange
     x = var("x")
     p = (x-1)**2
-    # 1.5
-    xv = Power(2,-1) * 3
+    xv = Quotient(3,2)
 
     max_prec = 113
     min_prec = 1
@@ -192,19 +201,25 @@ def test_iv_symbolic_5():
 
     # Assert
     b1 = Pow(3,-1)
+
     exp_bounds = [
-        Boundary(lower=MachineError(max_precision=max_prec).bound.lower,upper=BoundedValue(value=b1,open=True)),
-        Boundary(lower=BoundedValue(value=b1, open=False),upper=MachineError(min_precision=min_prec).bound.upper),
-        ]
+        Boundary(
+            lower=MachineError(max_precision=max_prec).bound.lower,
+            upper=BoundedValue(value=b1,open=True)
+        ),
+        Boundary(
+            lower=BoundedValue(value=b1,open=False),
+            upper=MachineError(min_precision=min_prec).bound.upper
+        )
+    ]
 
     err = symbols('eps')
     exp_equations = [
-        # -1/4 + ((1.5e + 0.5)(1+e))**2*(1+e)
-        (-1) * Pow(4,-1) + ((3*Pow(2,-1)*err+Pow(2,-1))*(1+err))**2*(1+err),
-        (-1) * Pow(4,-1) + ((3*Pow(2,-1)*err+Pow(2,-1))*(1+err))**2*(1+err)
+        # -0.25 + (1.5e**2+2*e+0.5)**2*(1+e)
+        (-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err),
+        (-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err)
     ]
 
-    __print_equations(actual)
     __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
 
 

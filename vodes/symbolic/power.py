@@ -14,12 +14,6 @@ class Power(PE):
         else:
             return f(self_val, other)
 
-    def __eq__(self, other):
-        if isinstance(other, PE):
-            return self.base == other.base and self.exponent == other.exponent
-
-        return False
-
     def __ne__(self, other):
         return not self == other
 
