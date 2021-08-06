@@ -118,187 +118,101 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
 
         return res
 
-    def __eval(self, fs: list, bv: BoundedValue, order):
-        """Evaluate functions for a given bounded value and determine the extrema using the given order function.
+    def __min_eval(self, x0, x1,fs:list):
+        """Evaluate the minimum function within the given boundary."""
+        return self.__eval(fs=fs,x0=x0, x1=x1, order=lambda a, b: a < b)
+
+    def __max_eval(self, x0, x1,fs:list):
+        """Evaluate the maximum function within the given boundary."""
+        return self.__eval(fs=fs,x0=x0, x1=x1, order=lambda a, b: a > b)
+
+    def __eval(self, order, x0, x1, fs:list):
+        """Evaluate functions between two values and determine the extrema using the given order function.
 
         Args:
             fs: Functions to evaluate.
-            bv: Value at which the functions are to be evaluated.
+            x0: Start of the section
+            x1: End of the section
             order: Defines the comparison between function value (e.g. <, >).
         
         Returns:
-            __eval: A 2-element tuple with the second element being the extreme value, as defined by the order. The first element contains the indices of the functions being evaluated to this value.
+            __eval: 
         """
+
         values = [None] * len(fs)
+        x = x0 + (x1-x0)/2
+
+        self._logger.debug(f'Evaluating {fs} at {x} ({x0}, {x1})')
 
         for i in range(0, len(fs)):
-            values[i] = self.__boundary_eval(fs[i], bv)
+            values[i] = self.__boundary_eval(fs[i], BoundedValue(
+                value=x,
+                open=False
+            ))
         
-        result = ([0], values[0])
+        result = (0, values[0])
         for i in range(1, len(fs)):
             if order(values[i], result[1]):
-                result = ([i], values[i])
+                result = (i, values[i])
             elif result[1] == values[i]:
-                result[0].append(i)
+                # As the evaluation takes places between two intersections, the functions must be equivalent, as only these cases of identical values are not contained within the intersections.
+                self._logger.info(f'Encountered equivalent functions {fs[result[0]]} and {fs[i]} within the section.')
 
-        return result
+        return result[0]
 
-    def __extrema_eval(self, fs: list, b: Boundary, intersections: list, order):
-        """Evaluate the extrema (e.g. minimum, maximum) of the given functions within the boundary.
-
-        Args:
-            order: Determines minimum, maximum evaluation.
-            fs: Functions to evaluate.
-            b: Boundary within the functions are to be evaluated.
-            intersections: The 3D array of intersections, as it was obtained for the functions using __intersections.
-
-        Returns:
-            __extrema_eval: The extrema function (minimum/maximum) over the boundary compared to the other functions, as index.
-        """
-        res = self.__eval(fs, b.lower, order)
-
-        if len(res[0]) == 1:
-            return res[0][0]
-
-        flat_intersections = [
-            item for sublist in intersections for subsublist in sublist for item in subsublist]
-
-        bound = b.upper.value
-        if len(flat_intersections) > 0:
-            bound = min(flat_intersections)
-
-        res = self.__eval(fs, BoundedValue(
-            value=(b.lower.value + bound)/2,
-            open=False
-        ),
-            order
-        )
-
-        return res[0][0]
-
-    def __min_eval(self, fs: list, b: Boundary, intersections: list):
-        """Evaluate the minimum function within the given boundary."""
-        return self.__extrema_eval(fs, b, intersections, order=lambda a, b: a < b)
-
-    def __max_eval(self, fs: list, b: Boundary, intersections: list):
-        """Evaluate the maximum function within the given boundary."""
-        return self.__extrema_eval(fs, b, intersections, order=lambda a, b: a > b)
-
-    def __next_eval(self, f: int, intersections: list, b: Boundary):
-        """Determine which functions are where to be evaluated next.
-
-        Args:
-            f: Current extrema function.
-            intersections: The 3D array of intersections, as it was obtained using __intersections. Importantly, we ignore intersections on the boundary, as they are (per definition) equal on the boundary values and evaluations beyond that are not needed.
-            b: Boundary to evaluate the next evaluation within.
-
-        Returns:
-            __next_eval: 3-element tuple. The first element is the list of functions with the next intersection with f. The second element is the intersection point with f. The third element is the closest intersection point of all functions contained within Item1.
-        """
-        # Item 1 : List of functions with next intersection with f
-        # Item 2 : Intersection point
-        # Item 3 : Closest intersection point of Item 1 with eachother
-        res = [[], None, None]
-
-        for i in range(len(intersections[f])):
-            xs = [x for x in intersections[f][i] if b.contains(x)]
-
-            if len(xs) == 0:
-                continue
-
-            if len(res[0]) == 0 or res[1] > xs[0]:
-                res = [[i], xs[0], None]
-            elif res[1] == xs[0]:
-                res[0].append(i)
-        
-        if len(res[0]) == 0:
-            return res
-
-        # intersection may be tangent
-        # e.g. 
-        # 2.25x^{5}+0.75x^{4}-3.5x^{3}-0.5x^{2}+1.25x-0.25
-        # -2.25x^{5}-5.25x^{4}-2.5x^{3}+1.5x^{2}+0.75x-0.25
-        res[0].append(f)
-
-        for i in range(len(res[0])):
-            # Closest intersection, after current intersection
-            xs = [x for x in intersections[res[0][0]][i] if b.contains(x) and x > res[1]]
-
-            if len(xs) == 0:
-                continue
-            if res[2] is None or res[2] > xs[0]:
-                res[2] = xs[0]
-
-
-        return res
 
     def __analysis(self, eval, b: Boundary, intersections: list, fs: list):
         """Evaluate the extremas (e.g. minima, maxima) of the given functions within the boundary and return a list of them with their respective boundary."""
         res = []
-        extrema = None
 
-        # (3) Determine possible switches of min/max based on intersections
-        min_bl = b.lower
-        max_bl = b.upper
+        lower = b.lower
+        candidates = [i for i in range(len(fs))]
+        
+        # There is still domain left to analyze
+        while lower.value < b.upper.value:
+            x0 = lower.value
 
-        while True:
-            candidates = []
+            # Determine the next possible intersection
+            xs = [item for sublist in intersections for subsublist in sublist for item in subsublist if item > x0]
+            xs.append(b.upper.value)
 
-            if extrema is None:
-                # Determine the next possible intersection
-                flat_intersections = [
-                    item for sublist in intersections for subsublist in sublist for item in subsublist if item > min_bl.value]
+            x1 = min(xs)
 
-                if len(flat_intersections) > 0:
-                    # Evaluate up until intersection
-                    max_bl = BoundedValue(
-                        value=min(flat_intersections), open=True)
-
-                candidates = [i for i in range(len(fs))]
-            else:
-                e_next = self.__next_eval(extrema, intersections, Boundary(
-                    lower=min_bl,
-                    # We start by anticipating the range to go till the end
-                    upper=b.upper
-                ))
-
-                # No more intersections to handle, minimum stays minimum
-                if len(e_next[0]) == 0:
-                    break
-
-                candidates = e_next[0]
-
-                if e_next[2] is None:
-                    # We evaluate until the upper boundary, as no more interesting intersection is given
-                    max_bl = b.upper
-                else:
-                    # We evaluate up until the next intersection
-                    max_bl = BoundedValue(
-                        value = e_next[2],
-                        open = True
+            # Determine extremum
+            extr_i = candidates[
+                eval(
+                    x0=x0,
+                    x1=x1,
+                    fs=[fs[i] for i in candidates]
                     )
+                ]
 
-            self._logger.debug(f'Evaluating {candidates} from {min_bl} to {max_bl}')
-            extrema = eval([fs[i] for i in candidates], Boundary(
-                lower=min_bl,
-                upper=max_bl
-            ), intersections)
+            # Determine sub-domain
+            upper = b.upper
+            for i in range(len(intersections[extr_i])):
+                xs = [item for item in intersections[extr_i][i] if item > x0 and item <= upper.value]
+
+                if len(xs) == 0:
+                    continue
+                else:
+                    t = min(xs)
+
+                    if t < upper.value:
+                        # may be tangent
+                        candidates = [extr_i, i]
+
+                        upper = BoundedValue(value=t,open=True)
+                    else:
+                        candidates.append(i)
+                    
+                    
+            self._logger.debug(f'Extrema : {fs[extr_i]} from {lower} to {upper}')
 
             res.append(
-                (candidates[extrema], min_bl)
+                (extr_i, Boundary(lower=lower,upper=upper))
             )
 
-            self._logger.debug(f'Extrema : {fs[candidates[extrema]]} from {min_bl} to {max_bl}')
-
-            # Start from intersection (including)
-            min_bl = BoundedValue(
-                value = max_bl.value,
-                open = False
-            )
-
-            # Boundary was already evaluated, finished
-            if res[-1][1] == min_bl:
-                break
+            lower = BoundedValue(value=upper.value, open=not upper.open)
 
         return res
 
@@ -334,35 +248,6 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
             ) 
         )
 
-    def __bound_result(self, rs, b:Boundary):
-        """Combines a list of bounded values to span the supplied boundary.
-
-        Args:
-            rs : List of tuples with first element being a value (e.g. expression, index) and the second element being a bounded value, describing the start of when the value is valid.
-
-        Returns:
-            __bound_result: List of 2-element tuples with first element being the value and the second element being the boundary of validity.
-        """
-        rs_bounded = [None]*len(rs)
-
-        for i in range(len(rs)):
-            if (i+1) == len(rs):
-                rs_bounded[i] = (rs[i][0], Boundary(
-                    lower=rs[i][1],
-                    upper=b.upper
-                ))
-            else:
-                rs_bounded[i] = (rs[i][0], Boundary(
-                    lower=rs[i][1],
-                    upper=BoundedValue(
-                        value=rs[i+1][1].value,
-                        open=not rs[i+1][1].open
-                    )
-                ))
-
-        return self.__merge_bounded_results(rs=rs_bounded)
-        
-
     def __sint(self, pfs:list, b:Boundary):
         """Determine the upper and lower bound of the symbolic interval and return it."""
         self._logger.debug(f"Symbolic Interval Evaluation : {list(map(str,pfs))}")
@@ -379,13 +264,11 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
         self._logger.debug(f'Maxima : {max_res}')
 
         # Convert Bounded Values to Boundaries
-        min_res_bounded = self.__bound_result(min_res,b)
-        max_res_bounded = self.__bound_result(max_res,b)
 
         # TODO : Very inefficient, but hey
         result = []
-        for minr in min_res_bounded:
-            for maxr in max_res_bounded:
+        for minr in min_res:
+            for maxr in max_res:
                 combined = minr[1].intersect(maxr[1])
 
                 if combined is None:
@@ -407,7 +290,7 @@ class ExactIntersectionEvaluator(ExactIntervalEvaluator):
                 )
 
         self._logger.info(f"_sint: {list(map(str,pfs))}")
-        self._logger.info(f"min: {min_res_bounded} , max: {max_res_bounded}")
+        self._logger.info(f"min: {min_res} , max: {max_res}")
 
         return result
 
