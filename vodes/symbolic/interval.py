@@ -8,7 +8,7 @@ from sys import intern
 from vodes.symbolic.absolute import Abs
 from vodes.symbolic.maximum import Max
 from vodes.symbolic.power import Power
-from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedVariable
+from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
 
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product
@@ -87,77 +87,9 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._context = context
         self._symbol = symbol
 
-    ##
-    # Utility functions
-    ##
-    def is_constant(self, expr):
-        """Determines, if the expression is constant"""
-        from pymbolic.primitives import is_constant
-        from pymbolic.mapper.dependency import DependencyMapper
-        return is_constant(expr) or not bool(DependencyMapper()(expr))
-
-    def __apply(self, op, ls: list, rs: list):
-        res = []
-
-        for l in ls:
-            for r in rs:
-                bound = self._symbol.bound
-                lexpr = l
-                rexpr = r
-
-                if isinstance(l, BoundedExpression):
-                    bound = bound.intersect(l.bound)
-                    lexpr = l.expr
-                # May result from BoundedMapper
-                elif isinstance(l, Variable) or self.is_constant(l):
-                    lexpr = Interval(l)
-
-                if isinstance(r, BoundedExpression):
-                    bound = bound.intersect(r.bound)
-                    rexpr = r.expr
-                # May result from BoundedMapper
-                elif isinstance(r, Variable) or self.is_constant(l):
-                    rexpr = Interval(l)
-
-                if not (isinstance(lexpr, Interval) and isinstance(rexpr, Interval)):
-                    raise TypeError(
-                        f"Cannot process {lexpr}, {rexpr} as (atleast) one entity is not an interval.")
-
-                res.extend(op(lexpr, rexpr, bound))
-
-        return res
-
-
-    def __constant_min_max(self, exprs:list) -> tuple:
-        """Determine the minimum and maximum for constant pymbolic expressions"""
-        from pymbolic import evaluate
-        from pymbolic.primitives import is_constant
-        
-        r_min = exprs[0]
-        r_max = exprs[0]
-
-        for expr in exprs:
-            if is_constant(expr):
-                lt = expr < r_min
-            else:
-                lt = evaluate(expr.lt(r_min))
-
-            if lt:
-                r_min = expr
-                continue
-
-            if is_constant(expr):
-                gt = expr > r_max
-            else:
-                gt = evaluate(expr.lt(r_max))
-
-            if gt:
-                r_max = expr
-                continue
-
-        return (r_min,r_max)
-    #
-
+    ####
+    # EXPRESSION MAPPING
+    ####
     def map_constant(self, expr) -> List[Interval]:
         res = [
             BoundedExpression(
@@ -224,7 +156,6 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     def map_power(self, expr:Power) -> List[BoundedExpression]:
         res = self.__apply(
             self._ipow,
-
             self.rec(expr.base),
             self.rec(expr.exponent)
         )
@@ -278,9 +209,9 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
-    ##
-    # Interval Arithmetic methods
-    ##
+    ####
+    # INTERVAL INTERFACE
+    ####
     def _iadd(self, l, r, b: Boundary):
         """Interval addition as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2.
         
@@ -326,17 +257,20 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             b (Boundary): The boundary ('Gültigkeitsbereich') of the division.
 
         Returns:
-            _idiv: A list of BoundedExpressions containing the result of the division (interval), possibly limited to subsets of the initial boundary.
+            _idiv: A list of BoundedExpressions containing the result of the division (interval), possibly limited to subsets of the initial boundary, that may in sum not be equal to the initial boundary.
         """
         rmin, rmax = r.low, r.up
 
-        # TODO : to be handled properly
-        # 0 \not in Y
-        return self._imul(l, Interval(Quotient(1,rmax),Quotient(1,rmin)), b)
-        # rmin = 0, rmax > 0
-        # [1/rmax,\infty)
-        # ...
-        # TODO : Applied Interval Analysis
+        if self.is_constant(rmin) and self.is_constant(rmax):
+            # 1. 0 \in r
+            if Boundary(BoundedValue(rmin,False),BoundedValue(rmax,False)).contains(0):
+                return self._imul(l, Interval(Quotient(1,rmax),Quotient(1,rmin)), b)
+            # 2. 0 \not\in r
+            else:
+                # Infinity = Not Defined (for us)
+                return []
+        else:
+            return self._sdiv(l, r, b)
 
     def _imul(self, l, r, b: Boundary):
         """Interval multiplication as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2. Because symbolic intervals are supported, the inheriting classes define custom evaluations for symbolic cases.
@@ -383,9 +317,9 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     def _ipow(self, l, r, b: Boundary):
         return self._spow(l, r, b)
 
-    ##
-    # Symbolic Interval methods (not evalutable otherwise)
-    ##
+    ####
+    # SYMBOLIC INTERVAL INTERFACE
+    ####
     @abstractmethod
     def _smul(self, l:Interval, r:Interval, b: Boundary):
         """Interval multiplication in the case of symbolic interval boundaries. In this case, the normal min/max interval multiplication can not be evaluated.
@@ -401,12 +335,95 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
 
     @abstractmethod
+    def _sdiv(self, l:Interval, r:Interval, b: Boundary):
+        """Interval division in the case of symbolic interval boundaries. In this case, the normal interval divison can not be determined, as knowledge about the inclusion of 0 is required.
+
+        Args:
+            l (Interval): The dividend of the division.
+            r (Interval): The divisor of the division.
+            b (Boundary): The boundary ('Gültigkeitsbereich') of the multiplication.
+
+        Returns:
+            _sdiv: A list of BoundedExpressions containing the result of the symbolic division (interval), possibly limited to subsets of the initial boundary.
+        """
+        pass
+
+    @abstractmethod
     def _spow(self, l:Interval, r:Interval, b: Boundary):
         pass
 
     @abstractmethod
     def _sabs(self, i:Interval, b: Boundary):
         pass
+
+    ####
+    # UTILITY FUNCTIONS
+    ####
+    def is_constant(self, expr):
+        """Determines, if the expression is constant"""
+        from pymbolic.primitives import is_constant
+        from pymbolic.mapper.dependency import DependencyMapper
+        return is_constant(expr) or not bool(DependencyMapper()(expr))
+
+    def __apply(self, op, ls: list, rs: list):
+        res = []
+
+        for l in ls:
+            for r in rs:
+                bound = self._symbol.bound
+                lexpr = l
+                rexpr = r
+
+                if isinstance(l, BoundedExpression):
+                    bound = bound.intersect(l.bound)
+                    lexpr = l.expr
+                # May result from BoundedMapper
+                elif isinstance(l, Variable) or self.is_constant(l):
+                    lexpr = Interval(l)
+
+                if isinstance(r, BoundedExpression):
+                    bound = bound.intersect(r.bound)
+                    rexpr = r.expr
+                # May result from BoundedMapper
+                elif isinstance(r, Variable) or self.is_constant(l):
+                    rexpr = Interval(l)
+
+                if not (isinstance(lexpr, Interval) and isinstance(rexpr, Interval)):
+                    raise TypeError(
+                        f"Cannot process {lexpr}, {rexpr} as (atleast) one entity is not an interval.")
+
+                res.extend(op(lexpr, rexpr, bound))
+
+        return res
+
+
+    def __constant_min_max(self, exprs:list) -> tuple:
+        """Determine the minimum and maximum for constant pymbolic expressions"""
+        from pymbolic import evaluate
+        from pymbolic.primitives import is_constant
+        
+        r_min = exprs[0]
+        r_max = exprs[0]
+
+        for expr in exprs:
+            if is_constant(expr):
+                lt = expr < r_min
+            else:
+                lt = evaluate(expr.lt(r_min))
+
+            if lt:
+                r_min = expr
+                continue
+
+            if is_constant(expr):
+                gt = expr > r_max
+            else:
+                gt = evaluate(expr.lt(r_max))
+
+            if gt:
+                r_max = expr
+
+        return (r_min,r_max)
 
 
 class ApproxIntervalEvaluator(SymbolicIntervalEvaluator):

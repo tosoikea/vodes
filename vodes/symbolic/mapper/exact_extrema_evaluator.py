@@ -6,7 +6,7 @@ from vodes.symbolic.symbols import Boundary, BoundedValue, BoundedExpression
 from vodes.symbolic.power import Power
 
 # Expression library
-from pymbolic.primitives import Variable, Expression
+from pymbolic.primitives import Variable, Expression, Quotient
 
 class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
     """Class for determining the exact boundaries of intervals on the basis of function analysis."""
@@ -132,8 +132,44 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
 
     def __get_boundary_sections(self, f, intersections:list, included, extrema, b:Boundary):
         """Convert the intersections of the boundary expression with an extrema value into a sectioning within the boundary. Importantly, we ignore intersections on the boundary, as they are (per definition) equal on the boundary values and evaluations beyond that are not needed."""
-        from pymbolic.interop.sympy import SympyToPymbolicMapper
+        sections = [
+            #(start,end,included)
+        ]
 
+        lower = b.lower.value
+
+        # 1. Determine sectioning
+        for x in intersections:
+            if not b.contains(x):
+                continue
+
+            val = self._boundary_eval(
+                f, 
+                BoundedValue(
+                    value=(lower + x)/2,
+                    open=False
+                )
+            )
+
+            sections.append(
+                (lower,x,included(val, extrema))
+            )
+            lower = x
+
+        if len(sections) == 0 or sections[-1][1] < b.upper.value:
+            val = self._boundary_eval(
+                f, 
+                BoundedValue(
+                    value=(lower + b.upper.value)/2,
+                    open=False
+                )
+            )
+
+            sections.append(
+                (lower, b.upper.value,included(val, extrema))
+            )
+
+        # 2. Determine if extrema is given within sections
         res = [
             # (
             #   Boundary ( start, end ),
@@ -141,48 +177,43 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
             # )
         ]
 
-        lower = b.lower
+        for i in range(len(sections)):
+            b_lower = None
+            b_upper = None
+            (start,end,is_included) = sections[i]
 
-        # 1. Determine sectioning
-        for x in intersections:
-            if not b.contains(x):
-                continue
+            if i == 0:
+                b_lower = b.lower
+            else:
+                if is_included:
+                    # Open, if previous already included extremum and therefore ended with ]
+                    b_lower = BoundedValue(start,open=sections[i - 1][2])
+                else:
+                    # If previous was also not inclusive, append sub-domain with only intersection point as inclusive
+                    if not sections[i - 1][2]:
+                        res.append(
+                            (
+                                Boundary(BoundedValue(start,False),BoundedValue(start,False)),
+                                [extrema]
+                            )
+                        )
+                    
+                    b_lower =  BoundedValue(start,open=True)
+
+            if i == len(sections) - 1:
+                b_upper = b.upper
+            else:
+                if is_included:
+                    b_upper = BoundedValue(end,open=False)
+                else:
+                    b_upper =  BoundedValue(end,open=True)
             
-            bound = Boundary(
-                lower = lower,
-                upper = BoundedValue(value=x, open=False if x != b.upper.value else b.upper.open)
-            )
-
             res.append(
-                (bound, [])
-            )
-
-            lower = BoundedValue(value=bound.upper.value, open=not bound.upper.open)
-
-        if len(res) == 0 or res[-1][0].upper.value < b.upper.value:
-            bound = Boundary(
-                lower = lower,
-                upper = b.upper
-            )
-
-            res.append(
-                (bound, [])
-            )
-
-        # 2. Determine if extrema is given within sections
-        for section in res:
-            val = self._boundary_eval(
-                f, 
-                BoundedValue(
-                    value=(section[0].lower.value + section[0].upper.value)/2,
-                    open=False
+                (
+                    Boundary(b_lower, b_upper),
+                    [extrema] if is_included else []
                 )
             )
-            
-            is_included = included(val, extrema)
-
-            if is_included:
-                section[1].append(SympyToPymbolicMapper()(extrema))
 
         return res
 
@@ -216,6 +247,31 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
     ####
     # SYMBOLIC INTERVAL INTERFACE
     ####
+    def _sdiv(self, l:Interval, r:Interval, b: Boundary):
+        """Interval division in the case of symbolic interval boundaries. In this case, the normal interval divison can not be determined, as knowledge about the inclusion of 0 is required.
+
+        Args:
+            l (Interval): The dividend of the division.
+            r (Interval): The divisor of the division.
+            b (Boundary): The boundary ('Gültigkeitsbereich') of the multiplication.
+
+        Returns:
+            _sdiv: A list of BoundedExpressions containing the result of the symbolic division (interval), possibly limited to subsets of the initial boundary.
+        """
+        res = []
+        sections = self.__get_sectioning(iv=r, extrema=[0],b=b)
+
+        for (b,xs) in sections:
+            # Division undefined
+            if 0 in xs:
+                continue
+            
+            res.extend(
+                self._imul(l, Interval(Quotient(1,r.up),Quotient(1,r.low)), b)
+            )
+
+        return res
+
     def _spow(self, l:Interval, r:Interval, b:Boundary):
         """Power operation on the basis of a symbolic interval base and degenerate interval exponent. Other constellations are not supported.
 
@@ -275,6 +331,7 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         from sympy.solvers import solveset
         from sympy import im
         res= []
+        
         xs = solveset(f)
 
         if not xs.is_FiniteSet:

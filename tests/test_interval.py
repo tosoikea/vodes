@@ -179,8 +179,8 @@ def test_interval_pow1(evaluators):
     #   a) -1 \in [-2,2] (Boundary)
     #   b) 0 <= f([-2,-1]), 0 >= f([-1,2])
     # 4. 
-    # =>    [-2,-1] min : (x+1)**2 ,   max : (x-1)**2
-    #       (-1, 0) min : 0        ,   max : (x-1)**2
+    # =>    [-2,-1) min : (x+1)**2 ,   max : (x-1)**2
+    #       [-1, 0) min : 0        ,   max : (x-1)**2
     #       [0 , 1] min : 0        ,   max : (x+1)**2
     #       (1 , 2] min : (x-1)**2 ,   max : (x+1)**2
 
@@ -188,7 +188,7 @@ def test_interval_pow1(evaluators):
         BoundedExpression(
             boundary=Boundary(
                 lower=BoundedValue(value=-2,open=False),
-                upper=BoundedValue(value=-1,open=False)
+                upper=BoundedValue(value=-1,open=True)
             ),
             expression=Interval(
                 lower=Power(x+1,u1),
@@ -197,7 +197,7 @@ def test_interval_pow1(evaluators):
         ),
         BoundedExpression(
             boundary=Boundary(
-                lower=BoundedValue(value=-1,open=True),
+                lower=BoundedValue(value=-1,open=False),
                 upper=BoundedValue(value=0,open=True)
             ),
             expression=Interval(
@@ -335,7 +335,7 @@ def test_interval_pow4(evaluators):
         BoundedExpression(
             boundary=Boundary(
                 lower=BoundedValue(value=-5,open=False),
-                upper=BoundedValue(value=0,open=False)
+                upper=BoundedValue(value=0,open=True)
             ),
             expression=Interval(
                 lower=x**u1,
@@ -344,7 +344,7 @@ def test_interval_pow4(evaluators):
         ),
         BoundedExpression(
             boundary=Boundary(
-                lower=BoundedValue(value=0,open=True),
+                lower=BoundedValue(value=0,open=False),
                 upper=BoundedValue(value=5,open=False)
             ),
             expression=Interval(
@@ -360,6 +360,223 @@ def test_interval_pow4(evaluators):
         #Act
         a = eval(context,symbol)(p)
 
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+
+def test_interval_div1(evaluators):
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-2,open=False),
+            upper=BoundedValue(value=2,open=False)
+        )
+    )
+
+    p = 1 / Interval(x-1,x+1)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=-2,open=False),
+                upper=BoundedValue(value=-1,open=True)
+            ),
+            expression=Interval(
+                lower=1/(x+1),
+                upper=1/(x-1)
+            )
+        ),
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=1,open=True),
+                upper=BoundedValue(value=2,open=False)
+            ),
+            expression=Interval(
+                lower=1/(x+1),
+                upper=1/(x-1)
+            )
+        ),
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+def test_interval_div2(evaluators):
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-1,open=False),
+            upper=BoundedValue(value=1,open=False)
+        )
+    )
+
+    p = 1 / Interval(x-1,x+1)
+
+    e = []
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+        #Assert
+        assert_bounded_iv_equations(a,e)
+        
+def test_interval_div3(evaluators):
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-5,open=False),
+            upper=BoundedValue(value=5,open=False)
+        )
+    )
+
+    p = 1 / Interval(0.5*x**2,x**2)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=-5,open=False),
+                upper=BoundedValue(value=0,open=True)
+            ),
+            expression=Interval(
+                lower=1/(x**2),
+                upper=1/(0.5*x**2)
+            )
+        ),
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=0,open=True),
+                upper=BoundedValue(value=5,open=False)
+            ),
+            expression=Interval(
+                lower=1/(x**2),
+                upper=1/(0.5*x**2)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+def test_interval_div4(evaluators):
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-5,open=False),
+            upper=BoundedValue(value=5,open=False)
+        )
+    )
+
+    p = 1 / Interval(0.5*x**2,x+20)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=-5,open=False),
+                upper=BoundedValue(value=0,open=True)
+            ),
+            expression=Interval(
+                lower=1/(x+20),
+                upper=1/(0.5*x**2)
+            )
+        ),
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=0,open=True),
+                upper=BoundedValue(value=5,open=False)
+            ),
+            expression=Interval(
+                lower=1/(x+20),
+                upper=1/(0.5*x**2)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+def test_interval_div5(evaluators):
+    import sympy as sp
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-1,open=False),
+            upper=BoundedValue(value=1,open=True)
+        )
+    )
+
+    expr = x**4 - x**2 + Power(4,-1)
+    p = 1 / Interval(expr)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=-1,open=False),
+                upper=BoundedValue(value=-sp.sqrt(2)/2,open=True)
+            ),
+            expression=Interval(
+                lower=1/(expr),
+                upper=1/(expr)
+            )
+        ),
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=-sp.sqrt(2)/2,open=True),
+                upper=BoundedValue(value=sp.sqrt(2)/2,open=True)
+            ),
+            expression=Interval(
+                lower=1/(expr),
+                upper=1/(expr)
+            )
+        ),
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=sp.sqrt(2)/2,open=True),
+                upper=BoundedValue(value=1,open=True)
+            ),
+            expression=Interval(
+                lower=1/(expr),
+                upper=1/(expr)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
         #Assert
         assert_bounded_iv_equations(a,e)
 
