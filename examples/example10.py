@@ -5,9 +5,10 @@ sys.path.append('../vodes')
 #
  
 from pymbolic import var
-from vodes.symbolic.interval import ExactIntersectionEvaluator as EIE, Interval
-from vodes.symbolic.symbols import BoundedVariable, MachineError
+from pymbolic.rational import Rational
+from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE, Interval
 from vodes.error.analysis import IntervalAnalysis as IA
+from vodes.symbolic.power import Power
 
 ##
 # Example is from https://www.moodle.tum.de/pluginfile.php/2367064/mod_resource/content/3/NumPro_Vorlesung_Kapitel_1.pdf
@@ -19,11 +20,11 @@ q = var('q')
 p = var('p')
 
 # 1.) x := sqrt(p²+q) - p
-f1 = (p**2 + q)**(0.5) - p
+f1 = Power(p**2 + q,Rational(1,2)) - p
 ia1 = IA(f1)
 
 # 2.) x:= q / ( sqrt(p²+q)+p )
-f2 = q / ((p**2 + q)**(0.5) + p)
+f2 = q / (Power(p**2 + q,Rational(1,2)) + p)
 ia2 = IA(f2)
 
 # p = 500, q = 1
