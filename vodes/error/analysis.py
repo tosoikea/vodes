@@ -1,18 +1,19 @@
 from abc import ABC, abstractmethod
 
-from numpy.core.function_base import linspace
 from vodes.symbolic.absolute import Abs
 from vodes.symbolic.maximum import Max
 
 from pymbolic.mapper.substitutor import SubstitutionMapper, make_subst_func
 from pymbolic.mapper.evaluator import EvaluationMapper
-from pymbolic.interop.sympy import PymbolicToSympyMapper, SympyToPymbolicMapper
+from pymbolic.interop.sympy import SympyToPymbolicMapper
+
 from vodes.symbolic.symbols import  MachineError
 from vodes.symbolic.interval import Interval
 from vodes.symbolic.power import Power
 
 from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
+from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 
 from vodes.error.mapper import AffineMapper, IntervalMapper
 from pymbolic.primitives import Expression
@@ -53,12 +54,19 @@ class Analysis(ABC):
         """
         pass
 
-    def show(self, ticks=100, end=1):
+    def show(self, ticks=100, end=1, xticks=10):
+        from sympy import Float
+        from numpy import linspace, float128, logspace
+
+        #from numpy.core.function_base import linspace
+
         if self._absolute is None:
             raise ValueError("No absolute error calculated")
 
         min_start = self._absolute[0].bound.lower.value
         max_end = self._absolute[-1].bound.upper.value
+
+        max_v = None
 
         for bexpr in self._absolute:
             # TODO : handle open intervals
@@ -70,17 +78,25 @@ class Analysis(ABC):
             
             bticks = ceil(ticks * (end - start) / (max_end - min_start))
 
-            expr_err = PymbolicToSympyMapper()(bexpr.expr)
-            f_err = lambdify(expr_err.free_symbols, expr_err)
+            expr_err = ExactPymbolicToSympyMapper()(bexpr.expr)
 
-            # TODO : absolute error may have no free symbols, if machine symbol was passed
             xs = linspace(start, end, num=bticks)
-            ys = f_err(xs)
+
+            if len(expr_err.free_symbols) == 0:
+                y = expr_err.evalf(512)
+                ys = [y for x in xs]
+            elif len(expr_err.free_symbols) == 1:
+                sym = expr_err.free_symbols.pop()
+                ys = [expr_err.subs(sym,Float(x,512)).evalf(512) for x in xs]
+            else:
+                raise ValueError("Ecountered too many free variables.")
 
             pyplot.plot(xs,ys)
 
-        pyplot.yscale('log',base=2)
+            max_v = max(ys) if max_v is None else max(max(ys),max_v)
+
         pyplot.xscale('log',base=2)
+        pyplot.grid(True)
         pyplot.show()
 
 
@@ -140,7 +156,7 @@ class TaylorAnalysis(Analysis):
         self.__mapper = AffineMapper()
 
         self.__expr = self.__mapper(self._problem)
-        sym_expr = PymbolicToSympyMapper()(self.__expr)
+        sym_expr = ExactPymbolicToSympyMapper()(self.__expr)
 
         self._logger.info(f'Affine Expression : {sym_expr}')
         self._logger.debug(f'Mappings : {self.__mapper.ids}')

@@ -42,13 +42,13 @@ class BoundedMapper(EvaluationMapper):
             )
 
     def _badd(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:a+b)
+        return self._bop(l,r,b,lambda a,b:Sum((a,b)))
 
     def _bmul(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:a*b)
+        return self._bop(l,r,b,lambda a,b:Product((a,b)))
 
     def _bdiv(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:a/b)
+        return self._bop(l,r,b,lambda a,b:Quotient(a,b))
 
     def _bpow(self, l, r, b):
         return self._bop(l,r,b,lambda a,b:Power(a,b))

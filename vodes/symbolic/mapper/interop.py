@@ -15,7 +15,7 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
         return self.sym.sympify(expr)
 
     def map_rational(self,expr):
-        return self.sym.Rational(expr.numerator, expr.denominator)
+        return self.map_quotient(expr)
 
     def map_variable(self, expr):
         return self.sym.Symbol(expr.name)
@@ -49,12 +49,12 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
         
     def map_quotient(self, expr):
         return self.sym.Mul(
-            self.rec(expr.numerator),
-            self.sym.Pow(
-                self.rec(expr.denominator),
-                -1
+                self.rec(expr.numerator),
+                self.sym.Pow(
+                    self.rec(expr.denominator),
+                    -1
+                )
             )
-        )
 
     def map_power(self, expr):
         return self.sym.Pow(

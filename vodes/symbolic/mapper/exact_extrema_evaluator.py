@@ -57,7 +57,6 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
                 )
             )
 
-        print(res)
         return self.__merge_bounded_expressions(res)
 
     def __get_sectioning(self,iv:Interval,extrema:list,b:Boundary) -> list:
@@ -283,46 +282,67 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         Returns:
             _spow: A list of BoundedExpressions containing the result of the symbolic power operation (interval), possibly limited to subsets of the initial boundary.
         """
+        from vodes.symbolic.absolute import Abs
+        from vodes.symbolic.utils import lt,gt
+
         if not self.is_constant(r.low):
             raise ValueError("The ExactExtremaEvaluator does not support symbolic exponents")
 
         if not (r.low == r.up):
             raise ValueError("The ExactExtremaEvaluator does not support non degenerate interval exponents")
 
+        # Ensure scalar exponent
+        exponent = r.low
+
+        # x^a, a < 0 = 1 / x^(|a|)
+        if lt(exponent,0):
+            res = []
+            bexprs = self._ipow(
+                    l=l,
+                    r=Interval(abs(exponent)),
+                    b=b
+                )
+            
+            for bexpr in bexprs:
+                res.extend(
+                    self._idiv(
+                        Interval(1),
+                        bexpr.expr,
+                        bexpr.bound
+                    )
+                )
+            
+            return res
+
         # 1. Determine Extrema
         _extrema = []
+        _bounds = []
 
         pf = Power(
                 Variable("x"),
-                r.low
+                exponent
             )
-        
-        if isinstance(r.low, int) or r.low.is_integer():
+            
+        if isinstance(exponent, int):
             # 1. x^a, a > 0
-            if r.low > 0:
+            if gt(exponent,0):
                 _extrema = [0]
-            # 2. x^a, a = 0 => x^a = 1
-            elif r.low == 0:
-                return Interval(1)
-            # 3. x^a, a < 0 = 1 / x^(|a|)
-            else:
-                return self._idiv(
-                    1,
-                    self._spow(
-                        l=l,
-                        r=Interval(abs(r.low)),
-                        b=b
-                    )
-                )
-        else:
-            _extrema = self.__get_extrema(pf)
 
-        return self.symbolic_expression(
-            expr=pf,
-            iv=l,
-            extrema=_extrema,
-            b=b
-        )
+                # D(x^a) = R
+                _bounds = [b]
+            # 2. x^a, a = 0 => x^a = 1
+            else:
+                return Interval(1)
+        else:
+            _extrema, _bounds = self.__get_extrema(pf,b)
+
+        for _bound in _bounds:
+            return self.symbolic_expression(
+                expr=pf,
+                iv=l,
+                extrema=_extrema,
+                b=_bound
+            )
 
     ####
     # UTILITY FUNCTIONS
@@ -330,11 +350,13 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
     def _solve(self, f, b:Boundary=None) -> list:
         from sympy.solvers import solveset
         from sympy import im
+
         res= []
         
         xs = solveset(f)
 
         if not xs.is_FiniteSet:
+            print(f)
             self._logger.info(f'{f} has no unique solution. Handling, as if no solution present.')
             return res
 
@@ -429,26 +451,63 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
 
         return res
 
-    def __get_diff(self,pf:Expression):
-        """Function to determine the derivative as sympy expression"""
-        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
-        from pymbolic.mapper.differentiator import DifferentiationMapper as DM
+    def __get_set(self, b:Boundary):
+        """Converts a boundary to a sympy set"""
+        from sympy import Interval
 
-        return ExactPymbolicToSympyMapper()(
-            DM(Variable("x"))(pf)
+        return Interval(
+            b.lower.value,
+            b.upper.value,
+            b.lower.open,
+            b.upper.open
         )
 
-    def __get_extrema(self,pf:Expression) -> list:
+    def __get_bounds(self, set) -> list:
+        """Converts a sympy set to a boundary"""
+        from sympy.sets.sets import EmptySet, Interval, Union
+
+        res = []
+        if isinstance(set,EmptySet):
+            return res
+        elif isinstance(set,Interval):
+            res.append(
+                Boundary(
+                    lower=BoundedValue(set.start,set.left_open),
+                    upper=BoundedValue(set.end,set.right_open)
+                )
+            )
+        elif isinstance(set,Union):
+            for x in set:
+                res.extend(self.__get_bounds(x))
+
+        return res
+
+
+    def __get_extrema(self,pf:Expression,b:Boundary) -> tuple:
         """Function to determine the (real) zero points of a given pymbolic Expression"""
+        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper as EPTS
+        from pymbolic.primitives import Variable
+        from pymbolic.mapper.differentiator import DifferentiationMapper as DM
+        from sympy import S, symbols
+        from sympy.calculus.util import continuous_domain
 
         # 1. Differentiate the Operator
-        f_diff = self.__get_diff(pf)
+        pf_diff = DM(Variable("x"))(pf)
+        f_diff = EPTS()(pf_diff)
         self._logger.debug(f'Using {f_diff} for determining the extrema of the power operator.')
 
         # 2. Determine extrema
         # TODO : Evaluate constraint, if needed
         # TODO : e.g. x^3 -> differentiation between global/local extrema required
         # TODO : Ensure sorting
-        return self._solve(f = f_diff)
+        extrema = self._solve(f = f_diff)
 
+        # 3. Determine bounds
+        f = EPTS()(pf)
+        d = continuous_domain(f,symbols("x"),S.Reals)
+        self._logger.debug(f'Determined domain {d} for {f}')
+
+        df = self.__get_set(b) - d.complement(S.Reals)
+
+        return (extrema, self.__get_bounds(df))
 

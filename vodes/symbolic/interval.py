@@ -11,6 +11,7 @@ from vodes.symbolic.power import Power
 from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
 
 from pymbolic.mapper import RecursiveMapper
+from pymbolic.rational import Rational
 from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
 
@@ -90,7 +91,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     ####
     # EXPRESSION MAPPING
     ####
-    def map_constant(self, expr) -> List[Interval]:
+    def map_constant(self, expr) -> List[BoundedExpression]:
         res = [
             BoundedExpression(
                 Interval(expr),
@@ -100,6 +101,18 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
         self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
+
+    def map_rational(self, expr:Rational) -> List[BoundedExpression]:
+        # Rational = Constant num and den
+        # However, pymbolic has bad support for rationals -> Convert
+        return [
+            BoundedExpression(
+                Interval(
+                    expr.Numerator * Power(expr.Denominator,-1)
+                ),
+                boundary=self._symbol.bound
+            )
+        ]
   
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         from pymbolic import evaluate
@@ -121,7 +134,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
-    def map_sum(self, expr:Sum) -> List[Expression]:
+    def map_sum(self, expr:Sum) -> List[BoundedExpression]:
         from functools import reduce
         res = reduce(
             lambda r, x: self.__apply(self._iadd, r, x), [
@@ -132,7 +145,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
-    def map_product(self, expr:Product) -> List[Expression]:
+    def map_product(self, expr:Product) -> List[BoundedExpression]:
         from functools import reduce
         res = reduce(
             lambda r, x: self.__apply(self._imul, r, x), [
@@ -143,7 +156,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._logger.debug(f'{expr} -> {list(map(str,res))}')
         return res
 
-    def map_quotient(self, expr:Quotient) -> List[Expression]:
+    def map_quotient(self, expr:Quotient) -> List[BoundedExpression]:
         res = self.__apply(
             self._idiv,
             self.rec(expr.numerator),
@@ -259,16 +272,18 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         Returns:
             _idiv: A list of BoundedExpressions containing the result of the division (interval), possibly limited to subsets of the initial boundary, that may in sum not be equal to the initial boundary.
         """
+        from vodes.symbolic.utils import le,ge
         rmin, rmax = r.low, r.up
 
         if self.is_constant(rmin) and self.is_constant(rmax):
             # 1. 0 \in r
-            if Boundary(BoundedValue(rmin,False),BoundedValue(rmax,False)).contains(0):
-                return self._imul(l, Interval(Quotient(1,rmax),Quotient(1,rmin)), b)
+            if le(rmin, 0) and ge(rmax, 0):
+                # Infinity = Not Defined (for us)
+                self._logger.debug(f'Dropping {r} for division, as it contains a 0.')
+                return []
             # 2. 0 \not\in r
             else:
-                # Infinity = Not Defined (for us)
-                return []
+                return self._imul(l, Interval(Quotient(1,rmax),Quotient(1,rmin)), b)
         else:
             return self._sdiv(l, r, b)
 
