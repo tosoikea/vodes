@@ -282,8 +282,11 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         Returns:
             _spow: A list of BoundedExpressions containing the result of the symbolic power operation (interval), possibly limited to subsets of the initial boundary.
         """
-        from vodes.symbolic.absolute import Abs
         from vodes.symbolic.utils import lt,gt
+        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper as EPTS
+        from pymbolic import substitute
+        from sympy import S, symbols
+        from sympy.calculus.util import continuous_domain
 
         if not self.is_constant(r.low):
             raise ValueError("The ExactExtremaEvaluator does not support symbolic exponents")
@@ -334,7 +337,23 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
             else:
                 return Interval(1)
         else:
-            _extrema, _bounds = self.__get_extrema(pf,b)
+            _extrema = self.__get_extrema(pf,b)
+
+            # Determine bounds
+            fl = EPTS()(substitute(pf,{
+                "x" : l.low
+            }))
+            dl = continuous_domain(fl,symbols("x"),S.Reals)
+            self._logger.debug(f'Determined domain {dl} for {fl}')
+
+            fu = EPTS()(substitute(pf,{
+                "x" : l.up
+            }))
+            du = continuous_domain(fu,symbols("x"),S.Reals)
+            self._logger.debug(f'Determined domain {du} for {fu}')
+
+            df = self.__get_set(b) - (dl.complement(S.Reals) + du.complement(S.Reals))
+            _bounds = self.__get_bounds(df)
 
         for _bound in _bounds:
             return self.symbolic_expression(
@@ -483,13 +502,11 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         return res
 
 
-    def __get_extrema(self,pf:Expression,b:Boundary) -> tuple:
+    def __get_extrema(self,pf:Expression,b:Boundary) -> list:
         """Function to determine the (real) zero points of a given pymbolic Expression"""
         from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper as EPTS
         from pymbolic.primitives import Variable
         from pymbolic.mapper.differentiator import DifferentiationMapper as DM
-        from sympy import S, symbols
-        from sympy.calculus.util import continuous_domain
 
         # 1. Differentiate the Operator
         pf_diff = DM(Variable("x"))(pf)
@@ -502,12 +519,5 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         # TODO : Ensure sorting
         extrema = self._solve(f = f_diff)
 
-        # 3. Determine bounds
-        f = EPTS()(pf)
-        d = continuous_domain(f,symbols("x"),S.Reals)
-        self._logger.debug(f'Determined domain {d} for {f}')
-
-        df = self.__get_set(b) - d.complement(S.Reals)
-
-        return (extrema, self.__get_bounds(df))
+        return extrema
 
