@@ -8,7 +8,7 @@ from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, Bo
 from vodes.symbolic.power import Power
 from vodes.symbolic.interval import Interval
 from pymbolic import var
-from pymbolic.rational import Rational
+from pymbolic.primitives import Quotient
 
 # Utility functions for comparison
 from tests.utils import assert_bounded_iv_equations
@@ -237,7 +237,6 @@ def test_interval_pow1(evaluators):
         assert_bounded_iv_equations(a,e)
 
 def test_interval_pow2(evaluators):
-    #TODO : Verify TEST CASE
     #Arrange
     u1 = randrange(1,21,step=2) #Uneven exponent
     x = var("x") 
@@ -327,8 +326,20 @@ def test_interval_pow4(evaluators):
         )
     )
 
+    # 1. z**u1 has (global) minimum at z == 0
+    # 2. f: x == 0 <=> x = 0 
+    #   a) 0 \in [-5,5] (Boundary)
+    #   b) 0 <= f([0,5]), 0 >= f([-5,0])
+    # 3. f: 0.01x^3-10 == 0 <=> x = 10
+    #   a) 10 \not\in [-5,5] (Boundary)
+    #   b) 0 >= f([-5,5])
+    # 4. 
+    # =>    [-5, 0) min : x^2      ,   max : (0.01x^3-10)^2
+    #       [0,  5] min : 0        ,   max : (0.01x^3-10)^2
+
     # [x,0.01*x^3-10]
-    i = Interval(Rational(1,100) * x ** 3 - 10, x)
+    lower = Quotient(1,100) * x ** 3 - 10
+    i = Interval(lower, x)
     p = i**u1
 
     e = [
@@ -339,7 +350,7 @@ def test_interval_pow4(evaluators):
             ),
             expression=Interval(
                 lower=x**u1,
-                upper=(Rational(1,100) * x ** 3 - 10)**u1
+                upper=lower**u1
             )
         ),
         BoundedExpression(
@@ -349,7 +360,7 @@ def test_interval_pow4(evaluators):
             ),
             expression=Interval(
                 lower=0,
-                upper=(Rational(1,100) * x ** 3 - 10)**u1
+                upper=lower**u1
             )
         )
     ]
@@ -363,6 +374,119 @@ def test_interval_pow4(evaluators):
         #Assert
         assert_bounded_iv_equations(a,e)
 
+def test_interval_pow5(evaluators):
+    # Arrange
+    u1 = Quotient(randrange(1,11,step=2),2)
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-100,open=False),
+            upper=BoundedValue(value=100,open=False)
+        )
+    )
+
+    # 
+    p = Power(Interval(x),u1)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=0,open=False),
+                upper=BoundedValue(value=100,open=False)
+            ),
+            expression=Interval(
+                lower=Power(x,u1),
+                upper=Power(x,u1)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+def test_interval_pow6(evaluators):
+    # Arrange
+    u1 = Quotient(1,2)
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-100,open=False),
+            upper=BoundedValue(value=100,open=False)
+        )
+    )
+
+    # 
+    p = Power(Interval(x),u1)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=0,open=False),
+                upper=BoundedValue(value=100,open=False)
+            ),
+            expression=Interval(
+                lower=Power(x,u1),
+                upper=Power(x,u1)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+
+        #Assert
+        assert_bounded_iv_equations(a,e)
+
+def test_interval_pow7(evaluators):
+    # Arrange
+    u1 = Quotient(1,2)
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=0,open=False),
+            upper=BoundedValue(value=100,open=False)
+        )
+    )
+
+    # 
+    p = Power(Interval(x-1,x+1),u1)
+
+    e = [
+        BoundedExpression(
+            boundary=Boundary(
+                lower=BoundedValue(value=1,open=False),
+                upper=BoundedValue(value=100,open=False)
+            ),
+            expression=Interval(
+                lower=Power(x-1,u1),
+                upper=Power(x+1,u1)
+            )
+        )
+    ]
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a = eval(context,symbol)(p)
+
+        #Assert
+        assert_bounded_iv_equations(a,e)
 
 def test_interval_div1(evaluators):
     #Arrange
@@ -579,5 +703,32 @@ def test_interval_div5(evaluators):
         a = eval(context,symbol)(p)
         #Assert
         assert_bounded_iv_equations(a,e)
+
+def test_interval_div6(evaluators):
+    import sympy as sp
+    #Arrange
+    x = var("x") 
+    
+    symbol = BoundedVariable(
+        x.name,
+        boundary=Boundary(
+            lower=BoundedValue(value=-100,open=False),
+            upper=BoundedValue(value=100,open=True)
+        )
+    )
+
+    p1 = 1 / Interval(x)
+    p2 = Interval(x)**(-1)
+
+    context = {}
+
+    for eval in evaluators:
+        #Act
+        a1 = eval(context,symbol)(p1)
+        a2 = eval(context,symbol)(p2)
+
+        #Assert
+        assert_bounded_iv_equations(a1,a2)
+
 
 

@@ -1,3 +1,5 @@
+import logging
+
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.primitives import Sum, Product
 
@@ -17,7 +19,10 @@ class BinaryMapper(RecursiveMapper):
         >>> from vodes.symbolic.binary_mapper import BinaryMapper as BM
         >>> repr(BM()(u))
         "Sum((Sum((5, Variable('x'))), Variable('y')))"
-    """
+    """  
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+    
     def __split(self,f, expr):   
         if len(expr.children) <= 2:
             return expr
@@ -34,20 +39,31 @@ class BinaryMapper(RecursiveMapper):
         return f(*children)
 
     def map_sum(self, expr): 
-        return self.__split(lambda a,b : Sum((a,b)), expr)
+        res =  self.__split(lambda a,b : Sum((a,b)), expr)
+        self._logger.debug(f'{expr} -> {res}')
+        return res
 
     def map_product(self, expr):
-        return self.__split(lambda a,b : Product((a,b)), expr)
+        res = self.__split(lambda a,b : Product((a,b)), expr)
+        self._logger.debug(f'{expr} -> {res}')
+        return res
+
+    # always binary (numerator, denominator)
+    def map_rational(self, expr):
+        return expr
 
     # always binary (numerator, denominator)
     def map_quotient(self, expr):
         return expr
 
+    # always unary
     def map_constant(self, expr):
         return expr
         
+    # always unary
     def map_variable(self, expr):
         return expr
 
+    # always binary (base, exponent)
     def map_power(self, expr):
         return expr

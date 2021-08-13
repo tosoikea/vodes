@@ -8,10 +8,10 @@ from sys import intern
 from vodes.symbolic.absolute import Abs
 from vodes.symbolic.maximum import Max
 from vodes.symbolic.power import Power
-from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable
+from vodes.symbolic.rational import Rational
+from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable, Infinity, NegativeInfinity
 
 from pymbolic.mapper import RecursiveMapper
-from pymbolic.rational import Rational
 from pymbolic.primitives import Expression, Quotient, Variable, Sum, Product
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
 
@@ -105,14 +105,17 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     def map_rational(self, expr:Rational) -> List[BoundedExpression]:
         # Rational = Constant num and den
         # However, pymbolic has bad support for rationals -> Convert
-        return [
+        res = [
             BoundedExpression(
                 Interval(
-                    expr.Numerator * Power(expr.Denominator,-1)
+                    expr.num * Power(expr.den,-1)
                 ),
                 boundary=self._symbol.bound
             )
         ]
+        
+        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        return res
   
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         from pymbolic import evaluate
@@ -327,6 +330,74 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 boundary=b
             )
         ]
+    
+    def _icontains(self, iv:Interval, xs, b: Boundary) -> list:
+        """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
+
+        lower_sections = []
+        upper_sections = []
+
+
+        if not isinstance(xs, Boundary):
+            bs = Boundary(BoundedValue(xs,False),BoundedValue(xs,False))
+        else:
+            bs = xs
+
+
+        lower_val = bs.lower if not isinstance(bs.lower.value, NegativeInfinity) else bs.upper
+        upper_val = bs.upper if not isinstance(bs.upper.value, Infinity) else bs.lower
+
+        if not isinstance(bs.lower.value, NegativeInfinity):
+            self._logger.debug(f'Analyzing upper interval boundary {iv.up} for inclusion of {upper_val}')
+            upper_sections = [
+                (b,[xs] if len(vals) > 0 else []) for (b,vals) in self._sinclusion(
+                    iv.up,
+                    upper_val.value,
+                    incl=lambda y, val : y >= val,
+                    b=b,
+                    bf=lambda included: (upper_val.open and included) or (not upper_val.open and not included)
+                )
+            ]
+        else:
+            upper_sections = [(b,[xs])]
+
+        
+        if not isinstance(bs.upper.value, Infinity):
+            self._logger.debug(f'Analyzing lower interval boundary {iv.low} for inclusion of {lower_val}')
+            lower_sections = [
+                (b,[xs] if len(vals) > 0 else []) for (b,vals) in self._sinclusion(
+                    iv.low,
+                    lower_val.value,
+                    incl=lambda y, val : y <= val,
+                    b=b,
+                    # if bf = true -> interval open
+                    bf=lambda included: (lower_val.open and included) or (not lower_val.open and not included)
+                )
+            ]
+        else:
+            lower_sections = [(b,[xs])]
+
+        res = []
+        for (lower_b, lower_vals) in lower_sections:
+            for (upper_b, upper_vals) in upper_sections:
+                combined = lower_b.intersect(upper_b)
+
+                if combined is None:
+                    continue
+
+                # One includes, other excludes => In summary excluded
+                included = [v for v in lower_vals if v in upper_vals]
+
+                res.append(
+                    (
+                        combined,
+                        included
+                    )
+                )
+            
+        self._logger.debug(f'Combined boundary section {lower_sections}(l) and {upper_sections}(u) to {res}')
+        return res
+
 
     ## TODO : Evaluate concept
     def _ipow(self, l, r, b: Boundary):
@@ -369,6 +440,10 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
     @abstractmethod
     def _sabs(self, i:Interval, b: Boundary):
+        pass
+
+    @abstractmethod
+    def _sinclusion(self, expr, val, incl, bf, b: Boundary) -> list:
         pass
 
     ####

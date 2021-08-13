@@ -30,6 +30,14 @@ class BoundedValue:
     def __repr__(self) -> str:
         return str(self)
 
+class Infinity:
+    def __str__(self) -> str:
+        return f'oo'
+
+class NegativeInfinity:
+    def __str__(self) -> str:
+        return f'-oo'
+
 class Boundary:
     def __init__(self, lower:BoundedValue, upper:BoundedValue):
         assert lower

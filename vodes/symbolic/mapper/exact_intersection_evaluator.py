@@ -110,7 +110,8 @@ class ExactIntersectionEvaluator(ExactExtremaEvaluator):
         candidates = [i for i in range(len(fs))]
         
         # There is still domain left to analyze
-        while lower.value < b.upper.value:
+        is_analyzed = False
+        while not is_analyzed:
             x0 = lower.value
 
             # Determine the next possible intersection
@@ -155,6 +156,8 @@ class ExactIntersectionEvaluator(ExactExtremaEvaluator):
 
             lower = BoundedValue(value=upper.value, open=not upper.open)
 
+            # Finalize, if domain was fully analyzed
+            is_analyzed = lower.value == b.upper.value
         return res
 
     ####

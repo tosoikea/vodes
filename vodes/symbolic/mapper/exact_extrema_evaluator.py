@@ -14,12 +14,58 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
     def __init__(self, context: dict, symbol: Variable):
         super().__init__(context=context, symbol=symbol)
 
-    @abstractmethod
-    def _get_symbolic_interval(self, pfs:list, b: Boundary) -> list:
-        """Construct symbolic intervals based on the included expressions within the given boundary. Possibly returns a list of multiple intervals split into sub-boundaries."""
-        pass
+            
+    def general_symbolic_expression(self, expr:Expression, iv:Interval, b:Boundary) -> list:
+        """
+        TODO : Documentation ~ common_symbolic_expression. However, domains are obtained
+        """
+        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper as EPTS
+        from sympy import S, symbols
+        from sympy.calculus.util import continuous_domain
+    
+        sub_domains = []
+        res = []
 
-    def symbolic_expression(self, expr:Expression, iv:Interval, extrema:list, b:Boundary) -> list:
+        # 0. Determine extrema
+        extrema = self.__get_extrema(expr,b)
+
+        # 1. Determine function bounds
+        f = EPTS()(expr)
+        d = continuous_domain(f,symbols("x"),S.Reals)
+        self._logger.debug(f'Determined domain {d} for {f}')
+
+        # 2. Determine undefined ranges
+        invalid_bounds = self.__get_bounds(d.complement(S.Reals))
+
+        # 3. Determine inclusions
+        if len(invalid_bounds) == 0:
+            sub_domains = [b]
+        else:
+            for invalid in invalid_bounds:
+                self._logger.debug(f'Analyzing (partial) inclusion of {invalid} within {iv}')
+
+                for (section_b, sections_vals) in self._icontains(iv=iv, xs=invalid, b=b):
+                    if len(sections_vals) == 0:
+                        sub_domains.append(section_b)
+                    else:
+                        self._logger.info(f'Dropping {section_b} as {f} contains values from {sections_vals} using {iv}')
+
+
+        # 4. Evaluate expression
+        for sub_domain in sub_domains:
+            res.extend(
+                self.common_symbolic_expression(
+                    expr=expr,
+                    iv=iv,
+                    extrema=extrema,
+                    b=sub_domain
+                )
+            )
+
+        return res
+            
+
+    def common_symbolic_expression(self, expr:Expression, iv:Interval, extrema:list, b:Boundary) -> list:
         """
         TODO : Documentation
         """
@@ -61,8 +107,6 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
 
     def __get_sectioning(self,iv:Interval,extrema:list,b:Boundary) -> list:
         """Function to determine the sectioning based on when the interval contains the listed extremas."""
-        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
-
         # The values within the extremas ensure that f'(x) = 0 and indicate a (local) extrema.
         # We now search our boundaries for intersections with this value.
         # If no intersection is given, the value is always within the boundary.
@@ -78,49 +122,13 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
             )
         ]
 
-        f_low = ExactPymbolicToSympyMapper()(iv.low)
-        f_up =  ExactPymbolicToSympyMapper()(iv.up)
-
         for x in extrema:
             self._logger.debug(f'Analyzing zero point {x}.')
-            xb = Boundary(
-                    lower=BoundedValue(value=b.lower.value, open=True),
-                    upper=BoundedValue(value=b.upper.value, open=True)
-                )
-
-            # i_low = x
-            xlows = self._solve(
-                f=f_low-x,
-                b=xb
-            )
-            
-            lower_sections = self.__get_boundary_sections(
-                f= f_low,
-                intersections= xlows,
-                included= lambda val, extrema : val <= extrema,
-                extrema=x,
-                b=b
-            )
-
-            # i_up = x
-            xups = self._solve(
-                f=f_up - x,
-                b=xb
-            )
-
-            upper_sections = self.__get_boundary_sections(
-                f= f_up,
-                intersections= xups,
-                included= lambda val, extrema : val >= extrema,
-                extrema=x,
-                b=b
-            )
-
             res = self.__merge_sections(
                 existing=res,
-                expansions=self.__get_interval_sections(
-                    upper_sections=upper_sections,
-                    lower_sections=lower_sections,
+                expansions=self._icontains(
+                    iv,
+                    xs=x,
                     b=b
                 )
             )
@@ -129,119 +137,15 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         self._logger.debug(f'Determined the following extrema inclusions. {res}')
         return res
 
-    def __get_boundary_sections(self, f, intersections:list, included, extrema, b:Boundary):
-        """Convert the intersections of the boundary expression with an extrema value into a sectioning within the boundary. Importantly, we ignore intersections on the boundary, as they are (per definition) equal on the boundary values and evaluations beyond that are not needed."""
-        sections = [
-            #(start,end,included)
-        ]
+    
 
-        lower = b.lower.value
-
-        # 1. Determine sectioning
-        for x in intersections:
-            if not b.contains(x):
-                continue
-
-            val = self._boundary_eval(
-                f, 
-                BoundedValue(
-                    value=(lower + x)/2,
-                    open=False
-                )
-            )
-
-            sections.append(
-                (lower,x,included(val, extrema))
-            )
-            lower = x
-
-        if len(sections) == 0 or sections[-1][1] < b.upper.value:
-            val = self._boundary_eval(
-                f, 
-                BoundedValue(
-                    value=(lower + b.upper.value)/2,
-                    open=False
-                )
-            )
-
-            sections.append(
-                (lower, b.upper.value,included(val, extrema))
-            )
-
-        # 2. Determine if extrema is given within sections
-        res = [
-            # (
-            #   Boundary ( start, end ),
-            #   [ extrema ]
-            # )
-        ]
-
-        for i in range(len(sections)):
-            b_lower = None
-            b_upper = None
-            (start,end,is_included) = sections[i]
-
-            if i == 0:
-                b_lower = b.lower
-            else:
-                if is_included:
-                    # Open, if previous already included extremum and therefore ended with ]
-                    b_lower = BoundedValue(start,open=sections[i - 1][2])
-                else:
-                    # If previous was also not inclusive, append sub-domain with only intersection point as inclusive
-                    if not sections[i - 1][2]:
-                        res.append(
-                            (
-                                Boundary(BoundedValue(start,False),BoundedValue(start,False)),
-                                [extrema]
-                            )
-                        )
-                    
-                    b_lower =  BoundedValue(start,open=True)
-
-            if i == len(sections) - 1:
-                b_upper = b.upper
-            else:
-                if is_included:
-                    b_upper = BoundedValue(end,open=False)
-                else:
-                    b_upper =  BoundedValue(end,open=True)
-            
-            res.append(
-                (
-                    Boundary(b_lower, b_upper),
-                    [extrema] if is_included else []
-                )
-            )
-
-        return res
-
-    def __get_interval_sections(self,upper_sections:list,lower_sections:list,b:Boundary):
-        """Determine the inclusion of an extrema (section) based on the inclusion of the upper and lower boundaries. For the interval to include an extrema, both boundaries have to include it."""        
-        res = []
-
-        for lower_section in lower_sections:
-            for upper_section in upper_sections:
-                combined = lower_section[0].intersect(upper_section[0])
-
-                if combined is None:
-                    continue
-
-                included = lower_section[1]
-
-                # One includes, other excludes => In summary excluded
-                # May only include one extrema, as only one extrema was tested for inclusion
-                if len(lower_section[1]) != len(upper_section[1]):
-                    included = []
-
-                res.append(
-                    (
-                        combined,
-                        included
-                    )
-                )
-        self._logger.debug(f'Combined boundary section {lower_sections}(l) and {upper_sections}(u) to {res}')
-        return res
+    ####
+    # MIN/MAX INTERFACE
+    ####
+    @abstractmethod
+    def _get_symbolic_interval(self, pfs:list, b: Boundary) -> list:
+        """Construct symbolic intervals based on the included expressions within the given boundary. Possibly returns a list of multiple intervals split into sub-boundaries."""
+        pass
 
     ####
     # SYMBOLIC INTERVAL INTERFACE
@@ -283,10 +187,6 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
             _spow: A list of BoundedExpressions containing the result of the symbolic power operation (interval), possibly limited to subsets of the initial boundary.
         """
         from vodes.symbolic.utils import lt,gt
-        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper as EPTS
-        from pymbolic import substitute
-        from sympy import S, symbols
-        from sympy.calculus.util import continuous_domain
 
         if not self.is_constant(r.low):
             raise ValueError("The ExactExtremaEvaluator does not support symbolic exponents")
@@ -317,10 +217,6 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
             
             return res
 
-        # 1. Determine Extrema
-        _extrema = []
-        _bounds = []
-
         pf = Power(
                 Variable("x"),
                 exponent
@@ -329,55 +225,139 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         if isinstance(exponent, int):
             # 1. x^a, a > 0
             if gt(exponent,0):
-                _extrema = [0]
-
-                # D(x^a) = R
-                _bounds = [b]
+                return self.common_symbolic_expression(
+                    expr=pf,
+                    iv=l,
+                    extrema=[0],
+                    # D(x^a) = R
+                    b=b
+                )
             # 2. x^a, a = 0 => x^a = 1
             else:
                 return Interval(1)
         else:
-            _extrema = self.__get_extrema(pf,b)
-
-            # Determine bounds
-            fl = EPTS()(substitute(pf,{
-                "x" : l.low
-            }))
-            dl = continuous_domain(fl,symbols("x"),S.Reals)
-            self._logger.debug(f'Determined domain {dl} for {fl}')
-
-            fu = EPTS()(substitute(pf,{
-                "x" : l.up
-            }))
-            du = continuous_domain(fu,symbols("x"),S.Reals)
-            self._logger.debug(f'Determined domain {du} for {fu}')
-
-            df = self.__get_set(b) - (dl.complement(S.Reals) + du.complement(S.Reals))
-            _bounds = self.__get_bounds(df)
-
-        for _bound in _bounds:
-            return self.symbolic_expression(
+            return self.general_symbolic_expression(
                 expr=pf,
                 iv=l,
-                extrema=_extrema,
-                b=_bound
+                b=b
             )
+
+    def _sinclusion(self, expr, val, incl, bf, b: Boundary) -> list:
+        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
+
+        # 1. Determine sectioning
+        # 
+        # Every intersections between the expression and the desired value may indicate a change of inclusion.
+        # We therefore start by splitting the boundary using these intersections and analyze the inclusion within them.
+        # The inclusion is determined by evaluating the expression in the middle of the section and comparing it to the value.
+        #
+        sections = [
+            #(start,end,included)
+        ]
+
+        f = ExactPymbolicToSympyMapper()(expr)
+        
+        # Ignore intersections etc. on boundary
+        intersections = self._solve(
+            f=f-val,
+            b=Boundary(
+                lower=BoundedValue(value=b.lower.value, open=True),
+                upper=BoundedValue(value=b.upper.value, open=True)
+            )
+        )
+
+        lower = b.lower.value
+
+        # 1. Determine sectioning
+        for x in intersections:
+            if not b.contains(x):
+                continue
+
+            y = self._boundary_eval(
+                f, 
+                BoundedValue(
+                    value=lower + (x-lower)/2,
+                    open=False
+                )
+            )
+
+            sections.append(
+                (lower,x,incl(y, val))
+            )
+            lower = x
+
+        if len(sections) == 0 or sections[-1][1] < b.upper.value:
+            y = self._boundary_eval(
+                f, 
+                BoundedValue(
+                    value=lower + (b.upper.value - lower)/2,
+                    open=False
+                )
+            )
+
+            sections.append(
+                (lower, b.upper.value,incl(y, val))
+            )
+
+        
+        self._logger.debug(f'Split {b} into {sections} for {f}')
+
+        # 2. Determine sub-domains
+        #
+        # If we encounter two sections including the value, we collapse them.
+        # The same does not apply to two sections not including the value. 
+        # This is because they are seperated by an intersection between the expression and the value and therefore a sub-domain [val,val].
+
+        res = [
+            # (
+            #   Boundary ( start, end ),
+            #   [ value ]
+            # )
+        ]
+
+        for i in range(len(sections)):
+            (start,end,is_included) = sections[i]
+
+
+            xs = [val] if is_included else []
+
+            lower = BoundedValue(start, open=bf(is_included)) if i > 0 else b.lower
+            upper = BoundedValue(end, open=bf(is_included)) if i < len(sections) - 1 else b.upper
+
+            if i > 0:
+                (_,_, prev_is_included) = sections[i-1]
+
+                # Collapse
+                if is_included and prev_is_included:
+                    res[-1][0].upper = upper
+                    continue
+
+                # If previous was also not inclusive, append sub-domain with only intersection point as inclusive
+                elif not is_included and not prev_is_included:
+                    res.append(
+                        (
+                            Boundary(BoundedValue(start,False),BoundedValue(start,False)),
+                            [val]
+                        )
+                    )
+            
+            res.append(
+                (
+                    Boundary(lower, upper),
+                    xs
+                )
+            )
+            
+        self._logger.debug(f'Determined sub-domains {res}')
+
+        return res
 
     ####
     # UTILITY FUNCTIONS
     ####
-    def _solve(self, f, b:Boundary=None) -> list:
-        from sympy.solvers import solveset
+    def _purge_solutions(self, xs, b:Boundary=None) -> list:
         from sympy import im
-
-        res= []
-        
-        xs = solveset(f)
-
-        if not xs.is_FiniteSet:
-            print(f)
-            self._logger.info(f'{f} has no unique solution. Handling, as if no solution present.')
-            return res
+        res = []
 
         for x in xs:
             #TODO : Make real/complex support a parameter choice
@@ -389,6 +369,42 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
                 res.append(x)
 
         return res
+
+    def _map_solution(self, xs, b:Boundary=None) -> list:
+        from sympy.sets.sets import Union
+        from sympy.sets.fancysets import Reals
+
+        res = [] 
+        
+        if xs.is_empty:
+            self._logger.debug(f'No solution.')
+            return res
+
+        if xs.is_FiniteSet:
+            return self._purge_solutions(xs, b=b)
+
+        if isinstance(xs, Union):
+            for set in xs.args:
+                res.extend(
+                    self._map_solution(set,b)
+                )
+
+            return res
+
+        if isinstance(xs, Reals):
+            self._logger.debug(f'No unique solution. Treating as if no solution is present.')
+            return res
+
+        self._logger.info(xs.__class__)
+        raise ValueError("Found no solution.")
+
+    def _solve(self, f, b:Boundary=None) -> list:
+        from sympy.solvers import solveset
+        from sympy import S
+        self._logger.debug(f'Solving {f}')
+
+        xs = solveset(f,domain=S.Reals)
+        return self._map_solution(xs,b)
 
     def _boundary_eval(self, f, bv: BoundedValue):
         """Evaluate a function for a given bounded value.
@@ -470,16 +486,19 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
 
         return res
 
-    def __get_set(self, b:Boundary):
-        """Converts a boundary to a sympy set"""
-        from sympy import Interval
+    def __get_bounded_value(self, value):
+        from vodes.symbolic.symbols import Infinity, NegativeInfinity
+        from sympy.core.numbers import Infinity as INF, NegativeInfinity as NINF
+        from pymbolic.interop.sympy import SympyToPymbolicMapper
+        
 
-        return Interval(
-            b.lower.value,
-            b.upper.value,
-            b.lower.open,
-            b.upper.open
-        )
+        if isinstance(value, INF):
+            return Infinity()
+        elif isinstance(value, NINF):
+            return NegativeInfinity()
+        else:
+            return SympyToPymbolicMapper()(value)
+
 
     def __get_bounds(self, set) -> list:
         """Converts a sympy set to a boundary"""
@@ -491,8 +510,8 @@ class ExactExtremaEvaluator(ExactIntervalEvaluator, ABC):
         elif isinstance(set,Interval):
             res.append(
                 Boundary(
-                    lower=BoundedValue(set.start,set.left_open),
-                    upper=BoundedValue(set.end,set.right_open)
+                    lower=BoundedValue(self.__get_bounded_value(set.start),set.left_open),
+                    upper=BoundedValue(self.__get_bounded_value(set.end),set.right_open)
                 )
             )
         elif isinstance(set,Union):

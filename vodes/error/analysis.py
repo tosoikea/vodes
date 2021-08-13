@@ -54,9 +54,9 @@ class Analysis(ABC):
         """
         pass
 
-    def show(self, ticks=100, end=1, xticks=10):
+    def show(self, ticks=100, end=1):
         from sympy import Float
-        from numpy import linspace, float128, logspace
+        from numpy import linspace
 
         #from numpy.core.function_base import linspace
 

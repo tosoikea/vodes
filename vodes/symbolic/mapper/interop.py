@@ -49,9 +49,9 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
         
     def map_quotient(self, expr):
         return self.sym.Mul(
-                self.rec(expr.numerator),
+                self.rec(expr.num),
                 self.sym.Pow(
-                    self.rec(expr.denominator),
+                    self.rec(expr.den),
                     -1
                 )
             )

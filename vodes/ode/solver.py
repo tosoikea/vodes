@@ -42,7 +42,6 @@ class Solver(ABC):
 
         # Initialize solver
         step, symbols = self._sym_step()
-        pprint(step)
 
         self.__lambda_step = lambdify(symbols, step)
         # --

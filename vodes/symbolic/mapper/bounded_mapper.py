@@ -4,19 +4,19 @@ from functools import reduce
 from typing import List
 from vodes.symbolic.symbols import BoundedExpression, BoundedVariable
 from vodes.symbolic.power import Power
-from pymbolic.mapper.evaluator import EvaluationMapper
+from pymbolic.mapper import RecursiveMapper
+from pymbolic.mapper.evaluator import UnknownVariableError
 from pymbolic.primitives import Expression, Quotient, Power, Variable, Sum, Product, is_constant
 
-class BoundedMapper(EvaluationMapper):
+class BoundedMapper(RecursiveMapper):
     def __init__(self, context: dict, symbol: BoundedVariable):
         assert(not context is None)
         assert(symbol)
-
-        super().__init__(context=context)
-        self._symbol = symbol
+        self.context = context
+        self.symbol = symbol
 
     def __apply(self, op, l, r):
-        bound = self._symbol.bound
+        bound = self.symbol.bound
         lexpr = l
         rexpr = r
 
@@ -53,15 +53,21 @@ class BoundedMapper(EvaluationMapper):
     def _bpow(self, l, r, b):
         return self._bop(l,r,b,lambda a,b:Power(a,b))
 
+    def map_constant(self, expr):
+        return expr
+
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         # we do not substitute the free symbol
-        if not (self._symbol.name in self.context) and self._symbol.name == expr.name:
+        if not (self.symbol.name in self.context) and self.symbol.name == expr.name:
             return BoundedExpression(
                 expr,
-                boundary=self._symbol.bound
+                boundary=self.symbol.bound
             )
         else:
-            return super().map_variable(expr)
+            try:
+                return self.context[expr.name]
+            except KeyError:
+                raise UnknownVariableError(expr.name)
     
     def map_sum(self, expr:Sum) -> BoundedExpression:
         return reduce(
