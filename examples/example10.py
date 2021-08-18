@@ -4,11 +4,11 @@ import sys
 sys.path.append('../vodes')
 #
  
-from pymbolic import var
-from pymbolic.rational import Rational
-from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE, Interval
 from vodes.error.analysis import IntervalAnalysis as IA
-from vodes.symbolic.power import Power
+from vodes.symbolic.expressions.rational import Rational
+
+from pymbolic import var
+from pymbolic.primitives import Power
 
 ##
 # Example is from https://www.moodle.tum.de/pluginfile.php/2367064/mod_resource/content/3/NumPro_Vorlesung_Kapitel_1.pdf

@@ -2,8 +2,11 @@
 
 from functools import reduce
 from typing import List
-from vodes.symbolic.symbols import BoundedExpression, BoundedVariable
-from vodes.symbolic.power import Power
+
+# Custom Expression Library
+from vodes.symbolic.expressions.bounded import BoundedExpression, BoundedVariable
+
+# Symbolic Expression Library
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.mapper.evaluator import UnknownVariableError
 from pymbolic.primitives import Expression, Quotient, Power, Variable, Sum, Product, is_constant

@@ -5,12 +5,12 @@ import pytest
 
 from random import randrange
 from typing import List
-from vodes.symbolic.interval import Interval
 
-from sympy import sqrt
-from vodes.symbolic.symbols import Boundary, BoundedValue, MachineError, BoundedExpression
-from vodes.symbolic.interval import Interval
-from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE
+from pymbolic.primitives import Quotient, Power
+
+from vodes.symbolic.expressions.interval import Interval
+from vodes.symbolic.expressions.bounded import Domain, MachineError, BoundedExpression
+from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as EIE
 
 # Utility functions for comparison
 from tests.utils import assert_bounded_iv_equations
@@ -33,7 +33,7 @@ def test_multiple_intersections1():
     actual = EIE(context={}, symbol=MachineError())(expr)
 
     # Assert
-    intersection = sqrt(5)/5
+    intersection = Quotient(Power(5,Quotient(1,2)),5)
 
     expected = [
         BoundedExpression(
@@ -42,9 +42,11 @@ def test_multiple_intersections1():
                 lower=20*e**3 - 10*e**2,
                 upper=20*e**3 - 20*e**2 + 2
             ),
-            boundary=Boundary(
-                lower=MachineError().bound.lower,
-                upper=BoundedValue(value=intersection,open=True)
+            boundary=Domain(
+                start=MachineError().bound.start,
+                left_open=MachineError().bound.left_open,
+                end=intersection,
+                right_open=True
             )
         ),
         BoundedExpression(
@@ -53,9 +55,10 @@ def test_multiple_intersections1():
                lower=20*e**3 - 20*e**2 + 2,
                upper= 20*e**3-10*e**2
             ),
-            boundary=Boundary(
-                lower=BoundedValue(value=intersection, open=False),
-                upper=MachineError().bound.upper
+            boundary=Domain(
+                start=intersection,
+                end=MachineError().bound.end,
+                right_open=MachineError().bound.right_open
             )
         )
     ]

@@ -6,7 +6,6 @@ import sympy
 
 class ExactPymbolicToSympyMapper(RecursiveMapper):
     """"""
-    
     @property
     def sym(self):
         return sympy

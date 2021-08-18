@@ -5,66 +5,37 @@ import pytest
 import math
 from random import randrange
 
-from sympy.core.power import Pow
-from vodes.symbolic.interval import Interval
-
-from pymbolic.primitives import Power, Quotient
-from sympy.core.symbol import symbols
-from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, MachineError
 from vodes.error.analysis import IntervalAnalysis
-from pymbolic import var
 from interval import interval
 
-from pymbolic.primitives import Expression
+# Custom Expression Library
+from vodes.symbolic.expressions.bounded import Domain, BoundedExpression, MachineError
 
+# Symbolic Expression Library
+from pymbolic import var
+from pymbolic.primitives import Power, Quotient
 
-def __assert_expressions(l,r):
-    from pymbolic.interop.sympy import PymbolicToSympyMapper
-    from sympy import simplify
-
-    if isinstance(l,Expression):
-        l = PymbolicToSympyMapper()(l)
-    
-    if isinstance(r, Expression):
-        r = PymbolicToSympyMapper()(r)
-
-    assert simplify(l-r) == 0
-
-def __bound(iv):
-    b = max(abs(iv))
-    return b[0]
-
-def __assert_constant(actual,expected):
-    assert(len(actual)==1)
-    assert(isinstance(actual[0],BoundedExpression))
-
-    math.isclose(actual[0].expr, __bound(expected), rel_tol=0.01)
-
-def __assert_equation(actual,expected):
-    assert len(actual) == 1
-    assert isinstance(actual[0],BoundedExpression)
-
-    __assert_expressions(actual[0].expr, expected)
+from sympy.core.power import Pow
 
 def __assert_bounds(actual, expected):
-    assert len(actual) == len(expected)
+    from tests.utils import assert_bounded_equations
 
+    actual_noexpr = []
     for i in range(len(actual)):
         assert isinstance(actual[i],BoundedExpression)
-        __assert_expressions(actual[i].bound.lower.value, expected[i].lower.value)
-        __assert_expressions(actual[i].bound.upper.value, expected[i].upper.value)
-
-        assert actual[i].bound.lower.open == expected[i].lower.open
-        assert actual[i].bound.upper.open == expected[i].upper.open
-
-def __assert_equations(actual,bounds,equations):
-    __assert_bounds(actual, bounds)
-
-    for i in range(len(actual)):
-        __assert_expressions(actual[i].expr, equations[i])
+        actual_noexpr.append(
+            BoundedExpression(
+                expression=0,
+                boundary=actual[i].bound
+            )
+        )
+    
+    expected_noexpr = [BoundedExpression(expression=0,boundary=bound) for bound in expected]
+    assert_bounded_equations(actual_noexpr,expected_noexpr)
 
 def test_iv_full_sub_1():
     """Comparison of interval analysis with direct usage of interval library"""
+    from tests.utils import assert_constant
 
     # Arrange
     x = var("x")
@@ -86,103 +57,167 @@ def test_iv_full_sub_1():
     expected = expr_p_iv - expr_err_iv
 
     # Assert
-    __assert_constant(actual,expected)
+    assert_constant(actual,expected)
 
 
 def test_iv_symbolic_1():
+    from tests.utils import assert_bounded_equations
+
     # Arrange
     x = var("x")
     p = x * 2
     xv = 5
 
+    min_prec = 1
+    max_prec = 113
+
     # Act
     ia = IntervalAnalysis(p)
     actual = ia.absolute(context={
         "x": xv
     },
-    min_precision=1,
-    max_precision=113)
+    min_precision=min_prec,
+    max_precision=max_prec)
 
-    err = symbols('eps')
+    err = MachineError(min_precision=min_prec,max_precision=max_prec)
+
     # 20e + 10e^2
-    expected = 20*err + 10*err**2
+    expected = [
+        BoundedExpression(
+            expression=20*err + 10*err**2,
+            boundary=Domain(
+                start=err.bound.start,
+                left_open=err.bound.left_open,
+                end=err.bound.end,
+                right_open=err.bound.right_open
+            )
+        )
+    ]
 
-    __assert_equation(actual, expected)
+    assert_bounded_equations(actual, expected)
     
 def test_iv_symbolic_2():
+    from tests.utils import assert_bounded_equations
+
     # Arrange
     x = var("x")
     p = x + 20
     xv = 10
 
+    min_prec = 1
+    max_prec = 113
+
     # Act
     ia = IntervalAnalysis(p)
     actual = ia.absolute(context={
         "x": xv
     },
-    min_precision=1,
-    max_precision=113)
+    min_precision=min_prec,
+    max_precision=max_prec)
 
-    err = symbols('eps')
+    err = MachineError(min_precision=min_prec,max_precision=max_prec)
+
     # 40e + 10e^2
-    expected = 40*err + 10*err**2
+    expected = [
+        BoundedExpression(
+            expression=40*err + 10*err**2,
+            boundary=Domain(
+                start=err.bound.start,
+                left_open=err.bound.left_open,
+                end=err.bound.end,
+                right_open=err.bound.right_open
+            )
+        )
+    ]
 
-    __assert_equation(actual, expected)
+    assert_bounded_equations(actual, expected)
 
 
 def test_iv_symbolic_3():
+    from tests.utils import assert_bounded_equations
+
     # Arrange
     x = var("x")
     p = x**2
     xv = 5
 
+    min_prec = 1
+    max_prec = 113
+
     # Act
     ia = IntervalAnalysis(p)
     actual = ia.absolute(context={
         "x": xv
     },
-    min_precision=1,
-    max_precision=113)
+    min_precision=min_prec,
+    max_precision=max_prec)
 
-    err = symbols('eps')
+    err = MachineError(min_precision=min_prec,max_precision=max_prec)
+
     # 25e^3+75e^2+75e
-    expected = 25*err**3 + 75*err**2 + 75*err
+    expected = [
+        BoundedExpression(
+            expression=25*err**3 + 75*err**2 + 75*err,
+            boundary=Domain(
+                start=err.bound.start,
+                left_open=err.bound.left_open,
+                end=err.bound.end,
+                right_open=err.bound.right_open
+            )
+        )
+    ]
 
-    __assert_equation(actual, expected)
+    assert_bounded_equations(actual, expected)
 
 def test_iv_symbolic_4():
+    from tests.utils import assert_bounded_equations
+
     # Arrange
     x = var("x")
     p = (x-1)
     xv = Quotient(3,2)
 
+    min_prec = 1
+    max_prec = 113
+
     # Act
     ia = IntervalAnalysis(p)
     actual = ia.absolute(context={
         "x": xv
     },
-    min_precision=1,
-    max_precision=113)
+    min_precision=min_prec,
+    max_precision=max_prec)
 
     # Assert
-
-    #
+    err = MachineError(min_precision=min_prec,max_precision=max_prec)
     b1 = Quotient(1,3)
-    exp_bounds = [
-        Boundary(lower=MachineError(max_precision=113).bound.lower,upper=BoundedValue(value=b1,open=True)),
-        Boundary(lower=BoundedValue(value=b1, open=False),upper=MachineError(min_precision=1).bound.upper),
-        ]
 
-    err = symbols('eps')
-    exp_equations = [
-        # - 1/2 + (1.5e + 0.5)(1+e)
-        (-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err),
-        (-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err)
+    # - 1/2 + (1.5e + 0.5)(1+e)
+    expected = [
+        BoundedExpression(
+            expression=(-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err),
+            boundary=Domain(
+                start=err.bound.start,
+                left_open=err.bound.left_open,
+                end=b1,
+                right_open=True
+            ),
+        ),
+        BoundedExpression(
+            expression=(-1) * Quotient(1,2) + (Quotient(3,2) * err + Quotient(1,2)) * (1 + err),
+            boundary=Domain(
+                start=b1,
+                end=err.bound.end,
+                right_open=err.bound.right_open
+            ),
+        )
     ]
 
-    __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
+    assert_bounded_equations(actual, expected)
 
 def test_iv_symbolic_5():
+    from tests.utils import assert_bounded_equations
+    
     # Arrange
     x = var("x")
     p = (x-1)**2
@@ -200,27 +235,30 @@ def test_iv_symbolic_5():
     max_precision=max_prec)
 
     # Assert
+    err = MachineError(min_precision=min_prec,max_precision=max_prec)
     b1 = Pow(3,-1)
 
-    exp_bounds = [
-        Boundary(
-            lower=MachineError(max_precision=max_prec).bound.lower,
-            upper=BoundedValue(value=b1,open=True)
+    expected = [
+        BoundedExpression(
+            expression=(-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err),
+            boundary=Domain(
+                start=err.bound.start,
+                left_open=err.bound.left_open,
+                end=b1,
+                right_open=True
+            )
         ),
-        Boundary(
-            lower=BoundedValue(value=b1,open=False),
-            upper=MachineError(min_precision=min_prec).bound.upper
+        BoundedExpression(
+            expression=(-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err),
+            boundary=Domain(
+                start=b1,
+                end=err.bound.end,
+                right_open=err.bound.right_open
+            )
         )
     ]
 
-    err = symbols('eps')
-    exp_equations = [
-        # -0.25 + (1.5e**2+2*e+0.5)**2*(1+e)
-        (-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err),
-        (-1) * Quotient(1,4) + (Quotient(3,2)*err**2 + 2*err + Quotient(1,2))**2*(1+err)
-    ]
-
-    __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
+    assert_bounded_equations(actual, expected)
 
 
 def test_iv_symbolic_6():
@@ -249,14 +287,16 @@ def test_iv_symbolic_6():
     __assert_bounds(
         actual=actual,
         expected=[
-            Boundary(
-                lower=BoundedValue(value=Power(2,-max_prec),open=False),
-                upper=BoundedValue(value=Power(2,-min_prec),open=False)
+            Domain(
+                start=Power(2,-max_prec),
+                end=Power(2,-min_prec)
             )
-            ]
-        )
+        ]
+    )
 
 def test_iv_symbolic_7():
+    from tests.utils import assert_bounded_equations
+    
     """Test case to validate edge case, where expression is constant"""
     # Arrange
     p = 0
@@ -274,9 +314,16 @@ def test_iv_symbolic_7():
         )    
         
     # Assert
-    exp_bounds = [
-        Boundary(lower=MachineError(max_precision=max_prec).bound.lower,upper=MachineError(min_precision=min_prec).bound.upper),
-        ]
-    exp_equations = [0]
+    expected = [
+        BoundedExpression(
+            expression=0,
+            boundary=Domain(
+                start=MachineError(max_precision=max_prec).bound.start,
+                left_open=MachineError(max_precision=max_prec).bound.left_open,
+                end=MachineError(min_precision=min_prec).bound.end,
+                right_open=MachineError(min_precision=min_prec).bound.right_open,
+            )
+        )
+    ]
 
-    __assert_equations(actual, bounds=exp_bounds, equations=exp_equations)
+    assert_bounded_equations(actual, expected)

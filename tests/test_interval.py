@@ -4,27 +4,32 @@
 import pytest
 
 from random import randrange
-from vodes.symbolic.symbols import Boundary, BoundedExpression, BoundedValue, BoundedVariable, DummyVariable
-from vodes.symbolic.power import Power
-from vodes.symbolic.interval import Interval
+
+# Custom Expression Library
+from vodes.symbolic.expressions.bounded import Domain, BoundedExpression, BoundedVariable, DummyVariable
+from vodes.symbolic.expressions.interval import Interval
+
+# Symbolic Expression Library
 from pymbolic import var
-from pymbolic.primitives import Quotient
+from pymbolic.primitives import Quotient, Power
 
 # Utility functions for comparison
 from tests.utils import assert_bounded_iv_equations
 
 @pytest.fixture
 def evaluators():
-    from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE
+    from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
     return [
-        lambda c,s : EIE(context=c, symbol=s)
+        lambda c,s : IE(context=c, symbol=s)
     ]
 
 @pytest.fixture
 def static_evaluators():
-    from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator as EIE
+    from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
+    from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
     return [
-       EIE(context={}, symbol=DummyVariable())
+       SE(context={}, symbol=DummyVariable()),
+       IE(context={}, symbol=DummyVariable())
     ]
 
 def assert_static(res,val):
@@ -162,9 +167,9 @@ def test_interval_pow1(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-2,open=False),
-            upper=BoundedValue(value=2,open=False)
+        boundary=Domain(
+            start=-2,
+            end=2
         )
     )
 
@@ -186,9 +191,10 @@ def test_interval_pow1(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-2,open=False),
-                upper=BoundedValue(value=-1,open=True)
+            boundary=Domain(
+                start=-2,
+                end=-1,
+                right_open=True
             ),
             expression=Interval(
                 lower=Power(x+1,u1),
@@ -196,9 +202,10 @@ def test_interval_pow1(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-1,open=False),
-                upper=BoundedValue(value=0,open=True)
+            boundary=Domain(
+                start=-1,
+                end=0,
+                right_open=True
             ),
             expression=Interval(
                 lower=0,
@@ -206,9 +213,9 @@ def test_interval_pow1(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=False),
-                upper=BoundedValue(value=1,open=False)
+            boundary=Domain(
+                start=0,
+                end=1
             ),
             expression=Interval(
                 lower=0,
@@ -216,9 +223,10 @@ def test_interval_pow1(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=1,open=True),
-                upper=BoundedValue(value=2,open=False)
+            boundary=Domain(
+                start=1,
+                left_open=True,
+                end=2
             ),
             expression=Interval(
                 lower=Power(x-1,u1),
@@ -243,9 +251,9 @@ def test_interval_pow2(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-2,open=False),
-            upper=BoundedValue(value=2,open=False)
+        boundary=Domain(
+            start=-2,
+            end=2,
         )
     )
 
@@ -253,9 +261,9 @@ def test_interval_pow2(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-2,open=False),
-                upper=BoundedValue(value=2,open=False)
+            boundary=Domain(
+                start=-2,
+                end=2,
             ),
             expression=Interval(
                 lower=Power(x-1,u1),
@@ -282,9 +290,11 @@ def test_interval_pow3(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=0,open=True),
-            upper=BoundedValue(value=1,open=True)
+        boundary=Domain(
+            start=0,
+            left_open=True,
+            end=1,
+            right_open=True
         )
     )
 
@@ -292,9 +302,11 @@ def test_interval_pow3(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=True),
-                upper=BoundedValue(value=1,open=True)
+            boundary=Domain(
+                start=0,
+                left_open=True,
+                end=1,
+                right_open=True
             ),
             expression=Interval(
                 lower=x**u1 - x**u2,
@@ -320,9 +332,9 @@ def test_interval_pow4(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-5,open=False),
-            upper=BoundedValue(value=5,open=False)
+        boundary=Domain(
+            start=-5,
+            end=5
         )
     )
 
@@ -344,9 +356,10 @@ def test_interval_pow4(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-5,open=False),
-                upper=BoundedValue(value=0,open=True)
+            boundary=Domain(
+                start=-5,
+                end=0,
+                right_open=True
             ),
             expression=Interval(
                 lower=x**u1,
@@ -354,9 +367,9 @@ def test_interval_pow4(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=False),
-                upper=BoundedValue(value=5,open=False)
+            boundary=Domain(
+                start=0,
+                end=5
             ),
             expression=Interval(
                 lower=0,
@@ -376,14 +389,15 @@ def test_interval_pow4(evaluators):
 
 def test_interval_pow5(evaluators):
     # Arrange
-    u1 = Quotient(randrange(1,11,step=2),2)
+    #u1 = Quotient(randrange(1,11,step=2),2)
+    u1 = Quotient(3,2)
     x = var("x") 
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-100,open=False),
-            upper=BoundedValue(value=100,open=False)
+        boundary=Domain(
+            start=-100,
+            end=100
         )
     )
 
@@ -392,9 +406,9 @@ def test_interval_pow5(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=False),
-                upper=BoundedValue(value=100,open=False)
+            boundary=Domain(
+                start=0,
+                end=100
             ),
             expression=Interval(
                 lower=Power(x,u1),
@@ -419,9 +433,9 @@ def test_interval_pow6(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-100,open=False),
-            upper=BoundedValue(value=100,open=False)
+        boundary=Domain(
+            start=-100,
+            end=100
         )
     )
 
@@ -430,9 +444,9 @@ def test_interval_pow6(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=False),
-                upper=BoundedValue(value=100,open=False)
+            boundary=Domain(
+                start=0,
+                end=100
             ),
             expression=Interval(
                 lower=Power(x,u1),
@@ -457,9 +471,9 @@ def test_interval_pow7(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=0,open=False),
-            upper=BoundedValue(value=100,open=False)
+        boundary=Domain(
+            start=0,
+            end=100
         )
     )
 
@@ -468,9 +482,9 @@ def test_interval_pow7(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=1,open=False),
-                upper=BoundedValue(value=100,open=False)
+            boundary=Domain(
+                start=1,
+                end=100
             ),
             expression=Interval(
                 lower=Power(x-1,u1),
@@ -494,9 +508,9 @@ def test_interval_div1(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-2,open=False),
-            upper=BoundedValue(value=2,open=False)
+        boundary=Domain(
+            start=-2,
+            end=2
         )
     )
 
@@ -504,9 +518,10 @@ def test_interval_div1(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-2,open=False),
-                upper=BoundedValue(value=-1,open=True)
+            boundary=Domain(
+                start=-2,
+                end=-1,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(x+1),
@@ -514,9 +529,10 @@ def test_interval_div1(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=1,open=True),
-                upper=BoundedValue(value=2,open=False)
+            boundary=Domain(
+                start=1,
+                left_open=True,
+                end=2
             ),
             expression=Interval(
                 lower=1/(x+1),
@@ -539,9 +555,9 @@ def test_interval_div2(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-1,open=False),
-            upper=BoundedValue(value=1,open=False)
+        boundary=Domain(
+            start=-1,
+            end=1
         )
     )
 
@@ -563,9 +579,9 @@ def test_interval_div3(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-5,open=False),
-            upper=BoundedValue(value=5,open=False)
+        boundary=Domain(
+            start=-5,
+            end=5
         )
     )
 
@@ -573,9 +589,10 @@ def test_interval_div3(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-5,open=False),
-                upper=BoundedValue(value=0,open=True)
+            boundary=Domain(
+                start=-5,
+                end=0,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(x**2),
@@ -583,9 +600,10 @@ def test_interval_div3(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=True),
-                upper=BoundedValue(value=5,open=False)
+            boundary=Domain(
+                start=0,
+                left_open=True,
+                end=5
             ),
             expression=Interval(
                 lower=1/(x**2),
@@ -608,9 +626,9 @@ def test_interval_div4(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-5,open=False),
-            upper=BoundedValue(value=5,open=False)
+        boundary=Domain(
+            start=-5,
+            end=5
         )
     )
 
@@ -618,9 +636,10 @@ def test_interval_div4(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-5,open=False),
-                upper=BoundedValue(value=0,open=True)
+            boundary=Domain(
+                start=-5,
+                end=0,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(x+20),
@@ -628,9 +647,10 @@ def test_interval_div4(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=0,open=True),
-                upper=BoundedValue(value=5,open=False)
+            boundary=Domain(
+                start=0,
+                left_open=True,
+                end=5
             ),
             expression=Interval(
                 lower=1/(x+20),
@@ -654,9 +674,10 @@ def test_interval_div5(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-1,open=False),
-            upper=BoundedValue(value=1,open=True)
+        boundary=Domain(
+            start=-1,
+            end=1,
+            right_open=True
         )
     )
 
@@ -665,9 +686,10 @@ def test_interval_div5(evaluators):
 
     e = [
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-1,open=False),
-                upper=BoundedValue(value=-sp.sqrt(2)/2,open=True)
+            boundary=Domain(
+                start=-1,
+                end=-sp.sqrt(2)/2,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(expr),
@@ -675,9 +697,11 @@ def test_interval_div5(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=-sp.sqrt(2)/2,open=True),
-                upper=BoundedValue(value=sp.sqrt(2)/2,open=True)
+            boundary=Domain(
+                start=-sp.sqrt(2)/2,
+                left_open=True,
+                end=sp.sqrt(2)/2,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(expr),
@@ -685,9 +709,11 @@ def test_interval_div5(evaluators):
             )
         ),
         BoundedExpression(
-            boundary=Boundary(
-                lower=BoundedValue(value=sp.sqrt(2)/2,open=True),
-                upper=BoundedValue(value=1,open=True)
+            boundary=Domain(
+                start=sp.sqrt(2)/2,
+                left_open=True,
+                end=1,
+                right_open=True
             ),
             expression=Interval(
                 lower=1/(expr),
@@ -711,9 +737,10 @@ def test_interval_div6(evaluators):
     
     symbol = BoundedVariable(
         x.name,
-        boundary=Boundary(
-            lower=BoundedValue(value=-100,open=False),
-            upper=BoundedValue(value=100,open=True)
+        boundary=Domain(
+            start=-100,
+            end=100,
+            right_open=True
         )
     )
 

@@ -1,7 +1,8 @@
-from vodes.symbolic.symbols import MachineError, Noise
-from vodes.symbolic.interval import Interval
-from vodes.symbolic.power import Power
+from vodes.symbolic.expressions.bounded import MachineError, Noise
+from vodes.symbolic.expressions.interval import Interval
+
 from pymbolic.mapper import RecursiveMapper
+from pymbolic.primitives import Power
 
 class ErrorMapper(RecursiveMapper):
     def __init__(self):

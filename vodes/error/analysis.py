@@ -1,27 +1,25 @@
+import logging
 from abc import ABC, abstractmethod
 
-from vodes.symbolic.absolute import Abs
-from vodes.symbolic.maximum import Max
 
+# Custom Expressions
+from vodes.symbolic.expressions.absolute import Abs
+from vodes.symbolic.expressions.bounded import  MachineError
+from vodes.symbolic.expressions.interval import Interval
+
+# Custom Mapper
+from vodes.error.mapper import AffineMapper, IntervalMapper
+from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
+from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator
+from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
+
+# Symbolic Expression
+from pymbolic.primitives import Expression, Power
+
+# Mapper
 from pymbolic.mapper.substitutor import SubstitutionMapper, make_subst_func
 from pymbolic.mapper.evaluator import EvaluationMapper
 from pymbolic.interop.sympy import SympyToPymbolicMapper
-
-from vodes.symbolic.symbols import  MachineError
-from vodes.symbolic.interval import Interval
-from vodes.symbolic.power import Power
-
-from vodes.symbolic.mapper.exact_intersection_evaluator import ExactIntersectionEvaluator
-from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
-from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
-
-from vodes.error.mapper import AffineMapper, IntervalMapper
-from pymbolic.primitives import Expression
-from sympy import lambdify, diff
-from matplotlib import pyplot
-from math import ceil
-import logging
-from functools import reduce
 
 class Analysis(ABC):
     """Superclass for the concise implementations of roundoff error analysis for a symbolic problem.
@@ -55,8 +53,10 @@ class Analysis(ABC):
         pass
 
     def show(self, ticks=100, end=1):
+        from matplotlib import pyplot
         from sympy import Float
         from numpy import linspace
+        from math import ceil
 
         #from numpy.core.function_base import linspace
 
@@ -120,10 +120,10 @@ class IntervalAnalysis(Analysis):
         if min_precision <= 0 or max_precision < min_precision:
             raise ValueError(f"The supplied precision values {min_precision} and {max_precision} are invalid")
 
-        err = Max(Abs(self._problem - self.__expr))
+        err = Abs(self._problem - self.__expr)
         self._logger.info(f'Error : {err}')
 
-        self._absolute = ExactIntersectionEvaluator(
+        self._absolute = IntersectionEvaluator(
             context=context,
             symbol=MachineError(
                 min_precision=min_precision,
@@ -152,6 +152,9 @@ class TaylorAnalysis(Analysis):
 
 
     def __create_error_term(self):
+        from sympy import diff
+        from functools import reduce
+
         # Mapper exposes all created noise variables
         self.__mapper = AffineMapper()
 
@@ -220,10 +223,10 @@ class TaylorAnalysis(Analysis):
         # The approximative error term consists no machine error
         ##
         t_t1 = EvaluationMapper(context=context)(self.__t1)
-        err = Max(eps * Abs(t_t1) + Power(eps,2) * Abs(eps_r1))
+        err = eps * Abs(t_t1) + Power(eps,2) * Abs(eps_r1)
         self._logger.info(f'Approximative Error : {err}')
 
-        self._absolute = ExactIntersectionEvaluator(
+        self._absolute = IntersectionEvaluator(
             context=context,
             symbol=eps
         )(err)
