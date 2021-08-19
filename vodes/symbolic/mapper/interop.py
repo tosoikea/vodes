@@ -1,6 +1,6 @@
 
 from pymbolic.mapper import RecursiveMapper
-from pymbolic.primitives import Variable
+from pymbolic.primitives import Variable, Quotient
 
 import sympy
 
@@ -65,3 +65,9 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
     def map_derivative(self, expr):
         return self.sym.Derivative(self.rec(expr.child),
                 *[self.sym.Symbol(v) for v in expr.variables])
+
+    def map_nthroot(self,expr):
+        return self.sym.Pow(
+            self.rec(expr.expr),
+            self.map_quotient(Quotient(1,expr.n))
+        )

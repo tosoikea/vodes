@@ -7,6 +7,7 @@ from typing import List
 from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain
 from vodes.symbolic.expressions.interval import Interval
 from vodes.symbolic.expressions.rational import Rational
+from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.absolute import Abs
 
 # Expression Library
@@ -47,7 +48,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             )
         ]
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(CONST) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_rational(self, expr:Rational) -> List[BoundedExpression]:
@@ -65,7 +66,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             )
         ]
         
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(RATIONAL) : {expr} -> {list(map(str,res))}')
         return res
   
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
@@ -85,7 +86,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             )
         ]
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(VAR) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_sum(self, expr:Sum) -> List[BoundedExpression]:
@@ -96,18 +97,20 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             ]
         )
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(SUM) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_product(self, expr:Product) -> List[BoundedExpression]:
         from functools import reduce
-        res = reduce(
-            lambda r, x: self.__apply(self._imul, r, x), [
+        children = [
                 self.rec(child) for child in expr.children
             ]
+
+        res = reduce(
+            lambda r, x: self.__apply(self._imul, r, x), children
         )
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(PRODUCT) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_quotient(self, expr:Quotient) -> List[BoundedExpression]:
@@ -117,7 +120,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self.rec(expr.denominator)
         )
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(QUOTIENT) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_power(self, expr:Power) -> List[BoundedExpression]:
@@ -127,7 +130,23 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self.rec(expr.exponent)
         )
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(POWER) : {expr} -> {list(map(str,res))}')
+        return res
+    
+    def map_nthroot(self, expr:NthRoot) -> List[BoundedExpression]:
+        bexprs = self.rec(expr.expr)
+        res = []
+
+        for bexpr in bexprs:
+            res.extend(
+                self. _inthroot(
+                    bexpr.expr,
+                    n=expr.n,
+                    d=bexpr.bound
+                )
+            )
+
+        self._logger.info(f'(NTHROOT) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_interval(self, expr:Interval) -> List[BoundedExpression]:
@@ -150,7 +169,8 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 boundary=self._symbol.bound
             )
         ]
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+
+        self._logger.info(f'(INTERVAL) {expr} -> {list(map(str,res))}')
         return res
 
     def map_absolute(self, expr:Abs) -> List[BoundedExpression]:
@@ -158,11 +178,12 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         bexprs = self.rec(expr.expr)
 
         for bexpr in bexprs:
+            self._logger.warn(bexpr)
             res.extend(
                 self._iabs(i=bexpr.expr, d=bexpr.bound)
             )
 
-        self._logger.debug(f'{expr} -> {list(map(str,res))}')
+        self._logger.info(f'(ABS) : {expr} -> {list(map(str,res))}')
         return res
 
     ####
@@ -227,10 +248,15 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     @abstractmethod
     def _ipow(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
         pass
+
+    @abstractmethod
+    def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
+        pass
     
     @abstractmethod
     def _iabs(self, i:Interval, d:Domain) -> List[BoundedExpression]:
         pass
+    
 
     @abstractmethod
     def _icontains(self, expr, val, incl, bf, d: Domain) -> list:
@@ -287,6 +313,13 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         from vodes.symbolic.utils import le,ge
         from vodes.symbolic.expressions.infinity import NegativeInfinity, Infinity
 
+        if xs is None:
+            return [
+                (
+                    d,
+                    []
+                )
+            ]
 
         if not isinstance(xs, Domain):
             bs = Domain(xs,xs,False,False)

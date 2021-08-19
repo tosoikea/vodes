@@ -10,8 +10,8 @@ from vodes.symbolic.expressions.interval import Interval
 # Custom Mapper
 from vodes.error.mapper import AffineMapper, IntervalMapper
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
-from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
+from vodes.symbolic.mapper.taylor_intersection_evaluator import IntersectionEvaluator as IE
 
 # Symbolic Expression
 from pymbolic.primitives import Expression, Power
@@ -52,7 +52,7 @@ class Analysis(ABC):
         """
         pass
 
-    def show(self, ticks=100, end=1):
+    def show(self, ticks=100):
         from matplotlib import pyplot
         from sympy import Float
         from numpy import linspace
@@ -63,20 +63,16 @@ class Analysis(ABC):
         if self._absolute is None:
             raise ValueError("No absolute error calculated")
 
-        min_start = self._absolute[0].bound.lower.value
-        max_end = self._absolute[-1].bound.upper.value
-
         max_v = None
 
         for bexpr in self._absolute:
             # TODO : handle open intervals
-            start = EvaluationMapper()(bexpr.bound.lower.value)
-            end = min(EvaluationMapper()(bexpr.bound.upper.value),end)
-
-            if end <= start:
-                continue
+            from pymbolic import evaluate
+            start = evaluate(bexpr.bound.start)
+            end = evaluate(bexpr.bound.end)
             
-            bticks = ceil(ticks * (end - start) / (max_end - min_start))
+            # TODO : Implement scaling based on sub-domain length
+            bticks = ticks
 
             expr_err = ExactPymbolicToSympyMapper()(bexpr.expr)
 
@@ -91,6 +87,7 @@ class Analysis(ABC):
             else:
                 raise ValueError("Ecountered too many free variables.")
 
+            print(ys)
             pyplot.plot(xs,ys)
 
             max_v = max(ys) if max_v is None else max(max(ys),max_v)
@@ -123,7 +120,7 @@ class IntervalAnalysis(Analysis):
         err = Abs(self._problem - self.__expr)
         self._logger.info(f'Error : {err}')
 
-        self._absolute = IntersectionEvaluator(
+        self._absolute = IE(
             context=context,
             symbol=MachineError(
                 min_precision=min_precision,
@@ -226,7 +223,7 @@ class TaylorAnalysis(Analysis):
         err = eps * Abs(t_t1) + Power(eps,2) * Abs(eps_r1)
         self._logger.info(f'Approximative Error : {err}')
 
-        self._absolute = IntersectionEvaluator(
+        self._absolute = IE(
             context=context,
             symbol=eps
         )(err)

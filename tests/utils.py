@@ -1,16 +1,16 @@
+from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 from vodes.symbolic.expressions.interval import Interval
 from vodes.symbolic.expressions.bounded import BoundedExpression, Domain
-from pymbolic.interop.sympy import PymbolicToSympyMapper
 from pymbolic.primitives import Expression
 from sympy import expand
 
 
 def __assert_equivalent(pl:Expression,pr:Expression):
     if isinstance(pl,Expression):
-        pl = expand(PymbolicToSympyMapper()(pl))
+        pl = expand(ExactPymbolicToSympyMapper()(pl))
 
     if isinstance(pr,Expression):
-        pr = expand(PymbolicToSympyMapper()(pr))
+        pr = expand(ExactPymbolicToSympyMapper()(pr))
 
     assert pl == pr
 

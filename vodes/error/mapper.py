@@ -1,3 +1,4 @@
+from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.bounded import MachineError, Noise
 from vodes.symbolic.expressions.interval import Interval
 
@@ -39,6 +40,9 @@ class IntervalMapper(ErrorMapper):
     # TODO : Constants can also introduce rounding error
     def map_interval(self, expr):
         return expr
+
+    def map_nthroot(self, expr):
+        return NthRoot(self.rec(expr.expr),expr.n) * Interval(1 - MachineError(), 1 + MachineError())
 
 class AffineMapper(ErrorMapper):
     def __init__(self):

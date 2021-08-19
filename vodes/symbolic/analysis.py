@@ -24,7 +24,7 @@ class Analysis:
             raise ValueError("Not supporting functions with more than one free variable. Consider encoding the parameter as a vector.")
 
         if len(self.__f.free_symbols) == 1:
-            self.__symbol = str(list(self.__f.free_symbols)[0])
+            self.__symbol = list(self.__f.free_symbols)[0]
         else:
             self.__symbol = None
 
@@ -41,6 +41,87 @@ class Analysis:
         """Get the problem of this analysis"""
         return self.__pf
 
+    @property
+    def symbol(self):
+        """Get the free variable of the problem"""
+        return self.__symbol
+
+    def equals(self, y, d:Domain) -> List[Domain]:
+        ask = self.__f - y
+        return self._solve(ask,d=d)
+
+    def evaluate(self, x):
+        """Evaluate a function at a given point"""
+
+        if isinstance(x,Expression):
+            x = ExactPymbolicToSympyMapper()(x)
+
+        # ~ is_costant() of sympy objects
+        if self.__symbol is None:
+            return self.func
+
+        return self.__f.subs(self.__symbol, x)
+
+    def limit(self, x):
+        """Evaluate the limit of a function"""
+        from sympy.series.limits import limit
+
+        # ~ is_costant() of sympy objects
+        if self.__symbol is None:
+            return self.func
+
+        return limit(self.__f, self.__symbol, x)
+
+    def diff(self,n:int=1):
+        from sympy import diff
+
+        # ~ is_costant() of sympy objects
+        if self.__symbol is None:
+            return self.func
+
+        res = self.func
+
+        for i in range(n):
+            res = diff(res,self.__symbol)
+
+        return res
+
+    def taylor(self, a, n:int=1):
+        from sympy import series
+        assert n > 0
+
+        if isinstance(a,Expression):
+            a = ExactPymbolicToSympyMapper()(a)
+
+        # (1) Construct the taylor polynomial
+        f = series(self.func,self.symbol,x0=a,n=n)
+
+        bigO = f.getO()
+
+        f = f.removeO()
+
+        # (2) Use the taylor remainder estimation theorem
+        # TODO
+
+        return SympyToPymbolicMapper()(f)
+
+    def is_polynomial(self,n:int):
+        from sympy import Poly
+        from sympy.polys.polyerrors import PolynomialError
+
+        # ~ is_costant() of sympy objects
+        if self.__symbol is None:
+            return True
+
+        try:
+            res = Poly(self.func, self.__symbol)
+            return res.degree() <= n
+        except PolynomialError:
+            return False
+
+    ####
+    # UTILITY FUNCTIONS
+    ####
     def _convert_solution(self,d:Domain):
         from sympy.core.basic import Basic
         from sympy import CRootOf
@@ -131,24 +212,3 @@ class Analysis:
         self._logger.debug(f'{f} -> {res}')
 
         return res
-
-    def equals(self, y, d:Domain) -> List[Domain]:
-        ask = self.__f - y
-        return self._solve(ask,d=d)
-
-    def evaluate(self, x):
-        """Evaluate a function at a given point"""
-        # ~ is_costant() of sympy objects
-        if self.__symbol is None:
-            return self.__f
-
-        return self.__f.subs(self.__symbol, x)
-
-    def limit(self, x):
-        """Evaluate the limit of a function"""
-        from sympy.series.limits import limit
-
-        if self.__symbol is None:
-            return self.__f
-
-        return limit(self.__f, self.__symbol, x)

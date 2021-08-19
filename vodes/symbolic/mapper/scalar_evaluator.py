@@ -164,6 +164,9 @@ class ScalarEvaluator(ExactIntervalEvaluator):
             boundary=d
         )
 
+    def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
+        raise NotImplementedError()
+
     def _icontains(self, expr, val, incl, bf, d: Domain) -> list:
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         exprs = [

@@ -24,21 +24,14 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
     def __init__(self, context: dict, symbol: BoundedVariable):
         super().__init__(context=context, symbol=symbol)
         self._assumptions = {
-            "_minimum": [
-                # TODO : Add Polynomial(n=4) Assumption
-            ],
-            "_maximum": [
-                # TODO : Add Polynomial(n=4) Assumption
-            ],
-            "_idiv": [],
+            "_minimum": [],
+            "_maximum": [],
             "_ipow": [
                 Assumption(
                     property=IsScalar()
                 )
             ],
-            "_icontains":[
-                # TODO : Add Polynomial(n=4) Assumption
-            ]
+            "_icontains":[]
         }
 
     def common_symbolic_expression(self, expr:Expression, iv:Interval, d:Domain, extrema:list=[], invalid_bounds:List[Domain]=None) -> list:
@@ -212,7 +205,6 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
         Returns:
             _ipow: A list of BoundedExpressions containing the result of the symbolic power operation (interval), possibly limited to subsets of the initial boundary.
         """
-        from vodes.symbolic.expressions.infinity import NegativeInfinity
         from vodes.symbolic.utils import lt,gt,eq
         from vodes.symbolic.mapper.simplification_mapper import simplify
 
@@ -250,7 +242,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
             return res
 
         # TODO : Simplify
-        # Reason for limiting b^x to x \in Q :
+        # Reason for limiting b^x to x \in N :
         # 
         # The definitions for x \in R introduce further constraints, that are best considered by using the underlying constructs.
         # e.g. b^r == exp(r * ln(b)), b \in R^+
@@ -273,34 +265,8 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
             # b.) b^x, x = 0 => b^x = 1
             else:
                 return Interval(1)
-        # 2. b^x, x \in Q
-        elif isinstance(exponent, Quotient) and isinstance(exponent.den,int) and isinstance(exponent.den,int):
-            # a.) b^(m/n), n = 0
-            if eq(exponent.den,0):
-                self._logger.warning(f"Tried to use 0-th root")
-                return res
-            else:
-                # b.) b^(m/n), n even
-                # c.) b^(m/n), n odd
-                invalid_bounds = [
-                    Domain(
-                        start=NegativeInfinity(),
-                        end=0,
-                        left_open=True,
-                        right_open=True
-                        )
-                    ] if eq(exponent.den % 2,0) else []
-                
-                return self.common_symbolic_expression(
-                    expr=pf,
-                    iv=l,
-                    d=d,
-                    invalid_bounds=invalid_bounds
-                )
-
-
         else:
-            raise ValueError(f"Not supporting exponent {exponent}({exponent.__class__}). Please use the underyling constructs (exp,log)...")
+            raise ValueError(f"Not supporting exponent {exponent}({exponent.__class__}). Please use the underyling constructs (exp,log,nth-root)...")
 
     def _iabs(self, i:Interval, d:Domain) -> List[BoundedExpression]:
         return self._maximum(
@@ -310,6 +276,40 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
             ],
             boundary=d
         )
+
+    def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
+        from vodes.symbolic.expressions.infinity import NegativeInfinity
+
+        invalid_bounds = Domain(
+                        start=NegativeInfinity(),
+                        end=0,
+                        left_open=True,
+                        right_open=True
+                    ) if n % 2 == 0 else None
+
+        inclusion = self.contains(iv=i,xs=invalid_bounds,d=d)
+
+        res = []
+
+        for (sub_domain,included) in inclusion:
+            if len(included) > 0:
+                self._logger.warning(f'Dropping sub-domain {sub_domain} for {n}th-root with {i}, as it is undefined.')
+                continue
+            
+            # nth-root is monotonic increasing
+            # TODO : Verify this assumption
+            res.append(
+                BoundedExpression(
+                    expression=Interval(
+                        Power(base=i.low,exponent=Quotient(1,n)),
+                        Power(base=i.up,exponent=Quotient(1,n))
+                    ),
+                    boundary=sub_domain
+                )
+            )
+
+        return res
+        
 
     def _icontains(self, expr:Expression, val, incl, bf, d: Domain) -> list:
         """Determines if the provided symbolic boundary expr contains the supplied value within the given domain using the supplied inclusion function."""
@@ -452,8 +452,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
            for (extremum, subdomain) in self.__analysis(self.__min_eval,intersections=intersections,problems=problems,d=boundary)
         ]
 
-        self._logger.info(f"MIN({exprs}) => {res}")
-
+        self._logger.debug(f"MIN({exprs}) => {res}")
         return res
 
     def _maximum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
@@ -485,8 +484,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
            for (extremum, subdomain) in self.__analysis(self.__max_eval,intersections=intersections,problems=problems,d=boundary)
         ]
 
-        self._logger.info(f"MAX({exprs}) => {res}")
-
+        self._logger.debug(f"MAX({list(map(str,exprs))}) => {list(map(str,res))}")
         return res
 
     ####
@@ -569,7 +567,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
                     t = minimum(xs)
 
                     if lt(t, rv):
-                        # may be tangent
+                        # mawarny be tangent
                         candidates = [extr_i, i]
 
                         rv,ro = t,True
@@ -616,7 +614,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
         # TODO : Make use of domains
         for domain in answer:
             if domain.start != domain.end:
-                self._logger.warning(f'Dropping {domain} as domains are not yet fully supported.')
+                self._logger.info(f'Dropping {domain} as domains are not yet fully supported.')
                 continue
 
             res.append(domain.start)

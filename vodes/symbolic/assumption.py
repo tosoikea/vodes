@@ -23,7 +23,7 @@ class Assumption:
         self.__translation = translation
 
     def validate(self, exprs:List[BoundedExpression]) -> List[BoundedExpression]:
-        valid = map(self.__property.verify,exprs)
+        valid = list(map(self.__property.verify,exprs))
 
         if all(valid):
             return exprs
@@ -34,7 +34,7 @@ class Assumption:
                     res.append(exprs[i])
                     continue
 
-                tres = self.__translation(exprs[i])
+                tres = self.__translation.translate(exprs[i])
                 
                 if all(map(self.__property.verify,tres)):
                     res.extend(tres)

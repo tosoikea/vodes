@@ -8,6 +8,7 @@ from random import randrange
 # Custom Expression Library
 from vodes.symbolic.expressions.bounded import Domain, BoundedExpression, BoundedVariable, DummyVariable
 from vodes.symbolic.expressions.interval import Interval
+from vodes.symbolic.expressions.nthroot import NthRoot
 
 # Symbolic Expression Library
 from pymbolic import var
@@ -19,17 +20,21 @@ from tests.utils import assert_bounded_iv_equations
 @pytest.fixture
 def evaluators():
     from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
+    
     return [
         lambda c,s : IE(context=c, symbol=s)
     ]
 
 @pytest.fixture
 def static_evaluators():
+    from vodes.symbolic.mapper.taylor_intersection_evaluator import TaylorIntersectionEvaluator as TE
     from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
     from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
+
     return [
        SE(context={}, symbol=DummyVariable()),
-       IE(context={}, symbol=DummyVariable())
+       IE(context={}, symbol=DummyVariable()),
+       TE(context={}, symbol=DummyVariable())
     ]
 
 def assert_static(res,val):
@@ -136,7 +141,7 @@ def test_interval_sub(static_evaluators):
         # Assert
         assert_static(li, Interval(lower=l1-u2,upper=u1-l2))
         assert_static(ri, Interval(lower=l2-u1,upper=u2-l1))
-    
+  
 def test_interval_mul(static_evaluators):
     # Arrange
     u1 = randrange(5000)
@@ -158,7 +163,6 @@ def test_interval_mul(static_evaluators):
         # Assert
         assert_static(li, e)
         assert_static(ri, e)
-
 
 def test_interval_pow1(evaluators):
     #Arrange
@@ -387,10 +391,9 @@ def test_interval_pow4(evaluators):
         #Assert
         assert_bounded_iv_equations(a,e)
 
-def test_interval_pow5(evaluators):
+def test_interval_nthroot1(evaluators):
     # Arrange
-    #u1 = Quotient(randrange(1,11,step=2),2)
-    u1 = Quotient(3,2)
+    u1 = randrange(2,12,step=2)
     x = var("x") 
     
     symbol = BoundedVariable(
@@ -402,7 +405,7 @@ def test_interval_pow5(evaluators):
     )
 
     # 
-    p = Power(Interval(x),u1)
+    p = NthRoot(Interval(x), u1)**3
 
     e = [
         BoundedExpression(
@@ -411,8 +414,8 @@ def test_interval_pow5(evaluators):
                 end=100
             ),
             expression=Interval(
-                lower=Power(x,u1),
-                upper=Power(x,u1)
+                lower=Power(NthRoot(x,u1),3),
+                upper=Power(NthRoot(x,u1),3),
             )
         )
     ]
@@ -426,9 +429,9 @@ def test_interval_pow5(evaluators):
         #Assert
         assert_bounded_iv_equations(a,e)
 
-def test_interval_pow6(evaluators):
+def test_interval_nthroot2(evaluators):
     # Arrange
-    u1 = Quotient(1,2)
+    u1 = 2
     x = var("x") 
     
     symbol = BoundedVariable(
@@ -440,7 +443,7 @@ def test_interval_pow6(evaluators):
     )
 
     # 
-    p = Power(Interval(x),u1)
+    p = NthRoot(Interval(x),u1)
 
     e = [
         BoundedExpression(
@@ -449,8 +452,8 @@ def test_interval_pow6(evaluators):
                 end=100
             ),
             expression=Interval(
-                lower=Power(x,u1),
-                upper=Power(x,u1)
+                lower=NthRoot(x,u1),
+                upper=NthRoot(x,u1)
             )
         )
     ]
@@ -464,9 +467,9 @@ def test_interval_pow6(evaluators):
         #Assert
         assert_bounded_iv_equations(a,e)
 
-def test_interval_pow7(evaluators):
+def test_interval_nthroot3(evaluators):
     # Arrange
-    u1 = Quotient(1,2)
+    u1 = 2
     x = var("x") 
     
     symbol = BoundedVariable(
@@ -478,7 +481,7 @@ def test_interval_pow7(evaluators):
     )
 
     # 
-    p = Power(Interval(x-1,x+1),u1)
+    p = NthRoot(Interval(x-1,x+1),u1)
 
     e = [
         BoundedExpression(
@@ -487,8 +490,8 @@ def test_interval_pow7(evaluators):
                 end=100
             ),
             expression=Interval(
-                lower=Power(x-1,u1),
-                upper=Power(x+1,u1)
+                lower=NthRoot(x-1,u1),
+                upper=NthRoot(x+1,u1)
             )
         )
     ]

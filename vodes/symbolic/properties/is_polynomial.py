@@ -7,20 +7,22 @@ from vodes.symbolic.expressions.bounded import BoundedExpression
 # Expression Library
 from pymbolic.primitives import Expression
 
-class IsScalar(Property):
+class IsPolynomial(Property):
+    def __init__(self,n:int=4):
+        assert n > 0
+        self.n = n
+
     def verify(self, expr:BoundedExpression) -> bool:
         """Determines, if the expression is constant"""
         verify = [expr.expr.low,expr.expr.up] if isinstance(expr.expr,Interval) else [expr.expr]
-
+    
         return all(
             map(
-                _verification,
+                self._verification,
                 verify
             )
         )
 
-def _verification(expr:Expression) -> bool:
-    from pymbolic.primitives import is_constant
-    from pymbolic.mapper.dependency import DependencyMapper
-
-    return is_constant(expr) or not bool(DependencyMapper()(expr))
+    def _verification(self, expr:Expression) -> bool:
+        from vodes.symbolic.analysis import Analysis
+        return Analysis(expr).is_polynomial(n=self.n)

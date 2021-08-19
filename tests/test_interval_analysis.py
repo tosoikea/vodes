@@ -236,7 +236,7 @@ def test_iv_symbolic_5():
 
     # Assert
     err = MachineError(min_precision=min_prec,max_precision=max_prec)
-    b1 = Pow(3,-1)
+    b1 = Quotient(1,3)
 
     expected = [
         BoundedExpression(
