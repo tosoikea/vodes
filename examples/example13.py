@@ -8,7 +8,7 @@ from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.error.analysis import IntervalAnalysis as IA
 
 from pymbolic import var
-from pymbolic.primitives import Power
+from pymbolic.primitives import Quotient
 
 ##
 # Example is from https://www.math.utk.edu/~ccollins/M577/Handouts/cond_stab.pdf
@@ -26,9 +26,9 @@ ia1 = IA(f1)
 f2 = x / (NthRoot(1+x,2) + 1)
 ia2 = IA(f2)
 
-# x = 0
+# x ~ 0
 context = {
-    'x' : 0
+    'x' : Quotient(1,10*6)
 }
 
 err1 = ia1.absolute(context=context, min_precision=11, max_precision=113)

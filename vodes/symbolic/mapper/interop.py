@@ -58,7 +58,8 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
     def map_power(self, expr):
         return self.sym.Pow(
             self.rec(expr.base),
-            self.rec(expr.exponent)
+            self.rec(expr.exponent),
+            evaluate=False
         )  
 
 
@@ -66,8 +67,28 @@ class ExactPymbolicToSympyMapper(RecursiveMapper):
         return self.sym.Derivative(self.rec(expr.child),
                 *[self.sym.Symbol(v) for v in expr.variables])
 
+    ###
+    # FUNCTIONS
+    ###
     def map_nthroot(self,expr):
         return self.sym.Pow(
             self.rec(expr.expr),
             self.map_quotient(Quotient(1,expr.n))
         )
+
+    def map_sin(self, expr):
+        return self.sym.sin(
+            self.rec(expr.expr)
+        )
+
+    def map_cos(self, expr):
+        return self.sym.cos(
+            self.rec(expr.expr)
+        )
+
+    ###
+    # CONSTANTS
+    ###
+    def map_pi(self,expr):
+        return self.sym.pi
+    

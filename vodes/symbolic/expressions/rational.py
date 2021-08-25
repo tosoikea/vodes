@@ -1,9 +1,9 @@
 from sys import intern
 from pymbolic.mapper.stringifier import StringifyMapper
-from pymbolic.primitives import Expression
+from vodes.symbolic.expressions.primitives import ExtendedExpression
 
 
-class Rational(Expression):
+class Rational(ExtendedExpression):
     """Class to represent a rational number.
 
     Args:

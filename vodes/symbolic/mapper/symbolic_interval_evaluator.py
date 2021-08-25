@@ -2,12 +2,14 @@ import logging
 
 from abc import abstractmethod, ABC
 from typing import List
+from vodes.symbolic.expressions.primitives import Subtraction
 
 # Custom Expression library
 from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain
 from vodes.symbolic.expressions.interval import Interval
 from vodes.symbolic.expressions.rational import Rational
 from vodes.symbolic.expressions.nthroot import NthRoot
+from vodes.symbolic.expressions.trigonometric import cos, sin
 from vodes.symbolic.expressions.absolute import Abs
 
 # Expression Library
@@ -70,7 +72,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         return res
   
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
-        from pymbolic import evaluate
+        from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
 
         res = None
         # vexpr do not substitute the free symbol
@@ -93,6 +95,17 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         from functools import reduce
         res = reduce(
             lambda r, x: self.__apply(self._iadd, r, x), [
+                self.rec(child) for child in expr.children
+            ]
+        )
+
+        self._logger.info(f'(SUM) : {expr} -> {list(map(str,res))}')
+        return res
+
+    def map_sub(self, expr:Subtraction) -> List[BoundedExpression]:
+        from functools import reduce
+        res = reduce(
+            lambda r, x: self.__apply(self._isub, r, x), [
                 self.rec(child) for child in expr.children
             ]
         )
@@ -132,22 +145,6 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
         self._logger.info(f'(POWER) : {expr} -> {list(map(str,res))}')
         return res
-    
-    def map_nthroot(self, expr:NthRoot) -> List[BoundedExpression]:
-        bexprs = self.rec(expr.expr)
-        res = []
-
-        for bexpr in bexprs:
-            res.extend(
-                self. _inthroot(
-                    bexpr.expr,
-                    n=expr.n,
-                    d=bexpr.bound
-                )
-            )
-
-        self._logger.info(f'(NTHROOT) : {expr} -> {list(map(str,res))}')
-        return res
 
     def map_interval(self, expr:Interval) -> List[BoundedExpression]:
         from vodes.symbolic.mapper.bounded_mapper import BoundedMapper
@@ -178,12 +175,59 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         bexprs = self.rec(expr.expr)
 
         for bexpr in bexprs:
-            self._logger.warn(bexpr)
+            self._logger.warning(bexpr)
             res.extend(
                 self._iabs(i=bexpr.expr, d=bexpr.bound)
             )
 
         self._logger.info(f'(ABS) : {expr} -> {list(map(str,res))}')
+        return res
+
+    ## FUNCTIONS
+    def map_nthroot(self, expr:NthRoot) -> List[BoundedExpression]:
+        bexprs = self.rec(expr.expr)
+        res = []
+
+        for bexpr in bexprs:
+            res.extend(
+                self._inthroot(
+                    bexpr.expr,
+                    n=expr.n,
+                    d=bexpr.bound
+                )
+            )
+
+        self._logger.info(f'(NTHROOT) : {expr} -> {list(map(str,res))}')
+        return res
+
+    def map_sin(self, expr:sin) -> List[BoundedExpression]:
+        bexprs = self.rec(expr.expr)
+        res = []
+
+        for bexpr in bexprs:
+            res.extend(
+                self._isin(
+                    bexpr.expr,
+                    d=bexpr.bound
+                )
+            )
+
+        self._logger.info(f'(SIN) : {expr} -> {list(map(str,res))}')
+        return res
+
+    def map_cos(self, expr:cos) -> List[BoundedExpression]:
+        bexprs = self.rec(expr.expr)
+        res = []
+
+        for bexpr in bexprs:
+            res.extend(
+                self._icos(
+                    bexpr.expr,
+                    d=bexpr.bound
+                )
+            )
+
+        self._logger.info(f'(COS) : {expr} -> {list(map(str,res))}')
         return res
 
     ####
@@ -248,18 +292,25 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     @abstractmethod
     def _ipow(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
         pass
-
-    @abstractmethod
-    def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
-        pass
     
     @abstractmethod
     def _iabs(self, i:Interval, d:Domain) -> List[BoundedExpression]:
         pass
-    
 
     @abstractmethod
-    def _icontains(self, expr, val, incl, bf, d: Domain) -> list:
+    def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
+        pass
+
+    @abstractmethod
+    def _isin(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        pass
+
+    @abstractmethod
+    def _icos(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        pass
+    
+    @abstractmethod
+    def _icontains(self, expr:Interval, val, d: Domain, incl:set=set(("up","low"))) -> list:
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         pass
 
@@ -312,7 +363,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         from vodes.symbolic.utils import le,ge
         from vodes.symbolic.expressions.infinity import NegativeInfinity, Infinity
-
+        print(f'D:{d}')
         if xs is None:
             return [
                 (
@@ -326,9 +377,6 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         else:
             bs = xs
 
-        lower_sections = []
-        upper_sections = []
-
         (lv,lo) = (bs.start,bs.left_open) if not isinstance(bs.start, NegativeInfinity) else (bs.end,bs.right_open)
         (rv,ro) = (bs.end,bs.right_open) if not isinstance(bs.end, Infinity) else (bs.start,bs.left_open)
 
@@ -336,26 +384,22 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             self._logger.debug(f'Analyzing upper interval boundary {iv.up} for inclusion of {rv}')
             upper_sections = [
                 (b,[xs] if len(vals) > 0 else []) for (b,vals) in self._icontains(
-                    expr=iv.up,
+                    expr=iv,
                     val=rv,
-                    incl=lambda y, val : ge(y,val),
-                    bf=lambda included: (ro and included) or (not ro and not included),
+                    incl=set(("up",)),
                     d=d
                 )
             ]
         else:
             upper_sections = [(d,[xs])]
 
-        
         if not isinstance(bs.end, Infinity):
             self._logger.debug(f'Analyzing lower interval boundary {iv.low} for inclusion of {lv}')
             lower_sections = [
                 (b,[xs] if len(vals) > 0 else []) for (b,vals) in self._icontains(
-                    expr=iv.low,
+                    expr=iv,
                     val=lv,
-                    incl=lambda y, val : le(y,val),
-                    # if bf = true -> interval open
-                    bf=lambda included: (lo and included) or (not lo and not included),
+                    incl=set(("low",)),
                     d=d
                 )
             ]
@@ -363,8 +407,36 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             lower_sections = [(d,[xs])]
 
         res = []
-        for (lower_b, lower_vals) in lower_sections:
-            for (upper_b, upper_vals) in upper_sections:
+        
+        # Correct inclusions
+        # if bf = true -> interval open
+        bf_lower=lambda included: (lo and included) or (not lo and not included)
+        bf_upper=lambda included: (ro and included) or (not ro and not included) 
+
+        for i in range(len(lower_sections)):
+            (lower_b, lower_vals) = lower_sections[i]
+
+            llo = bf_lower(xs in lower_vals) if i > 0 else d.left_open
+            lro = bf_lower(xs in lower_vals) if i < len(lower_sections) - 1 else d.right_open
+            
+            for j in range(len(upper_sections)):
+                (upper_b, upper_vals) = upper_sections[j]
+
+                rlo = bf_upper(xs in upper_vals) if j > 0 else d.left_open
+                rro = bf_upper(xs in upper_vals) if j < len(upper_sections) - 1 else d.right_open
+
+                lower_b = Domain(
+                    start=lower_b.start,
+                    end=lower_b.end,
+                    left_open=llo,
+                    right_open=lro)
+
+                upper_b = Domain(
+                    start=upper_b.start,
+                    end=upper_b.end,
+                    left_open=rlo,
+                    right_open=rro)
+
                 combined = lower_b.intersect(upper_b)
 
                 if combined is None:

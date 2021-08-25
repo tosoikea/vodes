@@ -2,9 +2,11 @@
 
 from functools import reduce
 from typing import List
+from vodes.symbolic.expressions.primitives import Subtraction
 
 # Custom Expression Library
 from vodes.symbolic.expressions.bounded import BoundedExpression, BoundedVariable
+from vodes.symbolic.expressions.trigonometric import sin, cos
 
 # Symbolic Expression Library
 from pymbolic.mapper import RecursiveMapper
@@ -18,7 +20,7 @@ class BoundedMapper(RecursiveMapper):
         self.context = context
         self.symbol = symbol
 
-    def __apply(self, op, l, r):
+    def __apply(self, op, l, r=None):
         bound = self.symbol.bound
         lexpr = l
         rexpr = r
@@ -27,34 +29,47 @@ class BoundedMapper(RecursiveMapper):
             bound = bound.intersect(l.bound)
             lexpr = l.expr
 
-        if isinstance(r, BoundedExpression):
+        if not (r is None) and isinstance(r, BoundedExpression):
             bound = bound.intersect(r.bound)
             rexpr = r.expr
 
-        return op(lexpr, rexpr, bound)
+        # unary
+        if r is None:
+            return op(lexpr, bound)
+        else:
+            return op(lexpr, rexpr, bound)
 
-    def _bop(self, l, r, b, op):
-        r = op(l,r)
+    def _bop(self, b, op, l, r=None):
+        res = op(l) if r is None else op(l,r)
 
-        if is_constant(r):
-            return r
+        if is_constant(res):
+            return res
         else:
             return BoundedExpression(
-                expression=r,
+                expression=res,
                 boundary=b
             )
 
     def _badd(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:Sum((a,b)))
+        return self._bop(b,lambda a,b:Sum((a,b)),l,r=r)
+
+    def _bsub(self, l, r, b):
+        return self._bop(b,lambda a,b:Subtraction((a,b)),l,r=r)
 
     def _bmul(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:Product((a,b)))
+        return self._bop(b,lambda a,b:Product((a,b)),l,r=r)
 
     def _bdiv(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:Quotient(a,b))
+        return self._bop(b,lambda a,b:Quotient(a,b),l,r=r)
 
     def _bpow(self, l, r, b):
-        return self._bop(l,r,b,lambda a,b:Power(a,b))
+        return self._bop(b,lambda a,b:Power(a,b),l,r=r)
+
+    def _bsin(self, x, b):
+        return self._bop(b,lambda a:sin(a),x)
+
+    def _bcos(self, x, b):
+        return self._bop(b,lambda a:cos(a),x)
 
     def map_constant(self, expr):
         return expr
@@ -79,6 +94,13 @@ class BoundedMapper(RecursiveMapper):
             ]
         )
 
+    def map_sub(self, expr:Subtraction): 
+        return reduce(
+            lambda r, x: self.__apply(self._bsub, r, x), [
+                self.rec(child) for child in expr.children
+            ]
+        )
+
     def map_product(self, expr:Product) -> Expression:
         return reduce(
             lambda r, x: self.__apply(self._bmul, r, x), [
@@ -91,3 +113,9 @@ class BoundedMapper(RecursiveMapper):
 
     def map_quotient(self, expr:Quotient):
         return self.__apply(self._bdiv, self.rec(expr.numerator), self.rec(expr.denominator))
+
+    def map_sin(self, expr):
+        return self.__apply(self._bsin, self.rec(expr.expr))
+
+    def map_cos(self, expr):
+        return self.__apply(self._bcos, self.rec(expr.expr))

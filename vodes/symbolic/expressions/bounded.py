@@ -3,13 +3,13 @@ from typing import List
 
 # Custom Expression library
 from vodes.symbolic.utils import lt,gt,eq,le,ge
+from vodes.symbolic.expressions.primitives import ExtendedExpression
 
 # Expression Library
-from pymbolic.primitives import Expression, Variable, Power
+from pymbolic.primitives import Variable, Power
 
 # Expression Mapper
 from pymbolic.mapper.stringifier import StringifyMapper
-
 
 class Domain:
     """Class to represent the domain of an expression.
@@ -55,7 +55,7 @@ class Domain:
 
         return res
 
-    def intersect(self, other):
+    def intersect(self, other) -> object:
         """Constructs the intersection of this instance with another domain."""
 
         if not isinstance(other,Domain):
@@ -86,35 +86,90 @@ class Domain:
         else:
             return Domain(lv, rv, lo, ro)
 
-    def union(self, other):
+    def union(self, other) -> list:
         """Constructs the union of this instance with another domain."""
 
         if not isinstance(other,Domain):
-            raise TypeError(f"Invalid type {type(other)} for union of domains.")
+            raise TypeError(f"Invalid type {type(other)} for intersection of domains.")
 
-        lv = self.start
-        lo = self.left_open
-        
-        if lt(other.start, lv):
-            lv = other.start
-            lo = other.left_open
-        elif eq(other.start, lv):
-            lo = other.left_open and self.left_open
+        # (1) Is outside
+        if self.start > other.end or self.end < other.start:
+            return [self,other]
+        # (2) Expand
+        else: 
+            (lv,lo) = (self.start,self.left_open)
 
-        rv = self.end
-        ro = self.right_open
+            if lt(other.start,self.start):
+                (lv,lo) = (other.start,other.left_open)
+            elif eq(other.start,self.start):
+                lo = other.left_open and self.left_open
 
-        if gt(other.end, rv):
-            rv = other.end
-            ro = other.right_open
-        elif eq(other.end, rv):
-            ro = other.right_open and self.right_open
-        
-        return Domain(lv, rv, lo, ro)
+            (rv,ro) = (self.end,self.right_open)
 
-    def difference(self, other):
+            if gt(other.end,self.end):
+                (rv,ro) = (other.end,other.right_open)
+            elif eq(other.end,self.end):
+                lo = other.right_open and self.right_open
+
+            return [Domain(lv,rv,lo,ro)]
+
+    def difference(self, others:list) -> list:
         """Constructs the difference (set minus) of this instance with a list of other domains."""
-        pass
+        res = [self]
+
+        for other in others:
+            assert isinstance(other,Domain)
+            
+            tres = []
+            for r in res:
+                # (1) Is outside, no effect
+                # a) ..] ... [..
+                # b) )[.., ](.., )(..
+                # c) ..](, ..)[, ..)(
+                if is_outside(r,other):
+                    tres.append(r)
+                # (2) Splitting into two
+                # This is given, when r is fully including other and contains more items
+                elif (lt(r.start,other.start) or (eq(r.start,other.start) and other.left_open and not r.left_open)) and (gt(r.end,other.end) or (eq(r.end,other.end) and other.right_open and not r.right_open)):
+                    # 1.
+                    (rv,ro) = (other.start, not other.left_open)
+                    tres.append(
+                        Domain(
+                            r.start,rv,r.left_open,ro
+                        )
+                    )
+
+                    # 2.
+                    (lv,lo) = (other.end, not other.right_open)
+                    tres.append(
+                        Domain(
+                            lv,r.end,lo,r.right_open
+                        )
+                    )
+                # (3) Splitting into single
+                else:
+                    lv,lo,rv,ro = None,None,None,None
+
+                    if gt(other.start,r.start) or (eq(other.start,r.start) and other.left_open and not r.left_open):
+                        (lv,lo) = (r.start,r.left_open)
+                        rv = other.start
+                        ro = not other.left_open
+                    elif lt(other.end,r.end) or (eq(other.end,r.end) and other.right_open and not r.right_open):
+                        (rv,ro) = (r.end,r.right_open)
+                        lv = other.end
+                        lo = not other.right_open
+                    else:
+                        continue
+                        
+                    tres.append(
+                        Domain(
+                            lv,rv,lo,ro
+                        )
+                    )
+
+            res = tres
+
+        return res
 
     ####
     # Built-In Functions
@@ -140,7 +195,7 @@ class Domain:
     def __repr__(self) -> str:
         return str(self)
 
-class BoundedExpression(Expression):
+class BoundedExpression(ExtendedExpression):
     init_arg_names = ("boundary","expression",)
 
     def __init__(self,expression,boundary:Domain):
@@ -226,3 +281,30 @@ class DummyVariable(BoundedVariable):
                 right_open=True
             )
         )
+
+####
+# Utility Functions
+####   
+def is_outside(r:Domain,other:Domain) -> bool:
+    return (gt(r.start,other.end) or lt(r.end,other.start)) or (eq(r.start,other.end) and (r.left_open or other.right_open)) or (eq(r.end,other.start) and (r.right_open or r.left_open))
+    
+def intersect(ls:list,rs:list):
+    res = []
+
+    if ls is None:
+        ls = []
+    
+    if rs is None:
+        rs = []
+
+    for l in ls:
+        for r in rs:
+            combined = l.intersect(r)
+
+            if combined is None:
+                continue
+        
+            res.append(combined)
+            
+    return res 
+

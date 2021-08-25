@@ -167,7 +167,13 @@ class ScalarEvaluator(ExactIntervalEvaluator):
     def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
         raise NotImplementedError()
 
-    def _icontains(self, expr, val, incl, bf, d: Domain) -> list:
+    def _isin(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        raise NotImplementedError()
+
+    def _icos(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        raise NotImplementedError()
+
+    def _icontains(self, expr:Interval, val, d: Domain, incl:set=set(("up","low"))) -> list:
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         exprs = [
             BoundedExpression(expression=expr,boundary=d),
@@ -176,21 +182,17 @@ class ScalarEvaluator(ExactIntervalEvaluator):
             exprs = assumption.validate(
                 exprs
             )
-        
 
         if len(exprs) != 1:
             raise ValueError(f"Unexpected {exprs} (len!=1)")
-
-        if incl(expr.expr,val):
-            return [
-                (d,[val])
-            ]
-        else:
-            return [
-                (d,[])
-            ]
-
     
+        if ("up" in incl) and not (expr.up >= val):
+            return [(d,[])]
+        elif ("low" in incl) and not (expr.low <= val):
+            return [(d,[])]
+        else:
+            return [(d,[val])]
+
 
     ####
     # SYMBOLIC EXPRESSION INTERFACE

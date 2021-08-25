@@ -1,3 +1,5 @@
+from vodes.symbolic.expressions.primitives import Subtraction
+from vodes.symbolic.expressions.trigonometric import sin, cos
 from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.bounded import MachineError, Noise
 from vodes.symbolic.expressions.interval import Interval
@@ -25,10 +27,20 @@ class IntervalMapper(ErrorMapper):
         return Interval(expr - expr * MachineError(), expr + expr * MachineError())
 
     def map_sum(self, expr):
+        assert len(expr.children) == 2
+
         return sum(self.rec(child) for child in expr.children) * Interval(1 - MachineError(), 1 + MachineError())
+
+    def map_sub(self, expr):
+        assert len(expr.children) == 2
+
+        return Subtraction(tuple([self.rec(child) for child in expr.children])) * Interval(1 - MachineError(), 1 + MachineError())
 
     def map_product(self, expr):
         from pytools import product
+
+        assert len(expr.children) == 2
+
         return product(self.rec(child) for child in expr.children) * Interval(1 - MachineError(), 1 + MachineError())
 
     def map_quotient(self, expr):
@@ -43,6 +55,12 @@ class IntervalMapper(ErrorMapper):
 
     def map_nthroot(self, expr):
         return NthRoot(self.rec(expr.expr),expr.n) * Interval(1 - MachineError(), 1 + MachineError())
+
+    def map_sin(self, expr):
+        return sin(self.rec(expr.expr)) * Interval(1 - MachineError(), 1 + MachineError())
+
+    def map_cos(self, expr):
+        return cos(self.rec(expr.expr)) * Interval(1 - MachineError(), 1 + MachineError())
 
 class AffineMapper(ErrorMapper):
     def __init__(self):

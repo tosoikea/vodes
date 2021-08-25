@@ -9,7 +9,9 @@ from vodes.symbolic.assumption import Assumption
 # Custom Expression library
 from vodes.symbolic.expressions.interval import Interval
 from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain
-from vodes.symbolic.utils import le,ge,gt,lt,minimum,maximum
+from vodes.symbolic.expressions.trigonometric import sin,cos
+from vodes.symbolic.expressions.infinity import Infinity, NegativeInfinity
+from vodes.symbolic.utils import compare, le,ge,gt,lt,minimum,maximum
 
 # Custom Mappers
 from vodes.symbolic.mapper.symbolic_interval_evaluator import ExactIntervalEvaluator
@@ -17,9 +19,8 @@ from vodes.symbolic.mapper.symbolic_interval_evaluator import ExactIntervalEvalu
 # Expression Library
 from pymbolic.primitives import Expression, Quotient, Variable, Power
 
-class IntersectionEvaluator(ExactIntervalEvaluator):
-    """Class for determining the exact boundaries of intervals on the basis of function analysis.
-    TODO : Describe in depth, firstly in thesis."""
+class ComparisonEvaluator(ExactIntervalEvaluator):
+    """Class for determining the exact boundaries of intervals on the basis of function analysis, powered by sympy."""
 
     def __init__(self, context: dict, symbol: BoundedVariable):
         super().__init__(context=context, symbol=symbol)
@@ -67,20 +68,39 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
             ]
 
             for (subdomain,contained) in sections:
-                pfs = set(exprs)
+                request = []
+                pfs = set()
+
+                # We do this sorting, to allow extrema to be the first candidates in further methods.
+                # This is advantageous for e.g. minima and maxima detection.
+                # [-1,1] instead of [-1,-1](-1,1)[1,1] if boundaries are equal.
+                # TODO : In the long run, this should be fixed within the minima and maxima detection (without adding further comparisons)
 
                 # All extrema can be possible boundaries
                 # e.g. [-x,x] ** 2 
                 # != [(-x)**2,(x)**2]
                 # == [min(0,(-x)**2,(x)**2),max(0,(-x)**2,(x)**2)] = [0,x**2]
                 for extrema in contained:
-                    pfs.add(substitute(expr,{Variable("x"): extrema}))
+                    extrema_expr = substitute(expr,{Variable("x"): extrema})
 
-                self._logger.debug(f'Determining min/max for {pfs}.')
+                    if extrema_expr in pfs:
+                        continue
 
-                lower = self._minimum(list(pfs),subdomain)
-                upper = self._maximum(list(pfs),subdomain)
+                    pfs.add(extrema_expr)
+                    request.append(extrema_expr)
 
+                for boundary in exprs:
+                    if boundary in pfs:
+                        continue
+
+                    pfs.add(boundary)
+                    request.append(boundary)
+
+
+                self._logger.debug(f'Determining min/max for {list(map(str,request))}.')
+
+                lower = self._minimum(request,subdomain)
+                upper = self._maximum(request,subdomain)
                 res.extend(
                     [ 
                         BoundedExpression(
@@ -212,7 +232,7 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
         exprs = [
             BoundedExpression(expression=r,boundary=d),
         ]
-        for assumption in self._assumptions.get(self._icontains.__name__):
+        for assumption in self._assumptions.get(self._ipow.__name__):
             exprs = assumption.validate(
                 exprs
             )
@@ -309,10 +329,17 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
             )
 
         return res
-        
 
-    def _icontains(self, expr:Expression, val, incl, bf, d: Domain) -> list:
-        """Determines if the provided symbolic boundary expr contains the supplied value within the given domain using the supplied inclusion function."""
+    def _isin(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        raise NotImplementedError()
+
+    def _icos(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        raise NotImplementedError()
+
+    def _icontains(self, expr:Interval, val, d: Domain, incl:set=set(("up","low"))) -> list:
+        """Determines if the provided symbolic interval contains the supplied value within the given domain."""
+        from functools import cmp_to_key
+
         exprs = [
             BoundedExpression(expression=expr,boundary=d),
             ]
@@ -329,94 +356,38 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
         ]
 
         for bexpr in exprs:
-            # 1. Determine sectioning
-            # 
-            # Every intersections between the expression and the desired value may indicate a change of inclusion.
-            # We therefore start by splitting the boundary using these intersections and analyze the inclusion within them.
-            # The inclusion is determined by evaluating the expression in the middle of the section and comparing it to the value.
-            #
-            sections = [
-                #(start,end,included)
-            ]
+            if not ("up" in incl) :
+                upper_contained = [d]
+            else:
+                upper = Analysis(bexpr.expr.up,bexpr.bound)
+                upper_contained = upper.compare(val,lambda u,v: u>=v)
 
-            problem = Analysis(bexpr.expr)
-            
-            domains = problem.equals(
-                val,
-                # Ignore intersections etc. on boundary
-                Domain(
-                    start=d.start,
-                    end=d.end,
-                    left_open=True,
-                    right_open=True
-                )
+            if not ("low" in incl) :
+                lower_contained = [d]
+            else:
+                lower = Analysis(bexpr.expr.low,bexpr.bound)
+                lower_contained = lower.compare(val,lambda l,v: l<=v)
+
+            for u in upper_contained:
+                for l in lower_contained:
+                    combined = u.intersect(l)
+
+                    if combined is None:
+                        continue
+                    
+                    res.append(
+                        (combined,[val])
+                    )
+
+        excluded = d.difference(list(map(lambda r:r[0],res)))
+        for boundary in excluded:
+            res.append(
+                (boundary,[])
             )
 
-            lower = d.start
-
-            # 1. Determine sectioning
-            for domain in domains:
-                y = problem.evaluate(
-                    lower + (domain.start-lower)/2
-                )
-
-                # TODO : Evaluate domain usage, especially for open doamins
-                sections.append(
-                    (lower,domain.start,incl(y, val))
-                )
-                sections.append(
-                    (domain.start,domain.end,True)
-                )
-
-                lower = domain.end
-
-            if len(sections) == 0 or le(sections[-1][1],d.end):
-                y = problem.evaluate(
-                    lower + (d.end-lower)/2
-                )
-
-                sections.append(
-                    (lower,d.end,incl(y, val))
-                )
-
-            
-            self._logger.debug(f'Split {d} into {sections} for {expr}')
-
-            # 2. Determine sub-domains
-            #
-            # If we encounter two sections including the value, we collapse them.
-            # The same does not apply to two sections not including the value. 
-            # This is because they are seperated by an intersection between the expression and the value and therefore a sub-domain [val,val].
-            for i in range(len(sections)):
-                (start,end,is_included) = sections[i]
-
-
-                xs = [val] if is_included else []
-
-                (lv,lo) = (start, bf(is_included)) if i > 0 else (d.start, d.left_open)
-                (rv,ro) = (end, bf(is_included)) if i < len(sections) - 1 else (d.end, d.right_open)
-
-                if i > 0:
-                    (_,_, prev_is_included) = sections[i-1]
-
-                    # Collapse
-                    if is_included and prev_is_included:
-                        res[-1][0].end = rv
-                        res[-1][0].right_open = ro
-                        continue
-
-                res.append(
-                    (
-                        Domain(
-                            start=lv,
-                            end=rv,
-                            left_open=lo,
-                            right_open=ro
-                        ),
-                        xs
-                    )
-                )
-            
+        # Sort
+        list.sort(res,key=cmp_to_key(lambda item1,item2: compare(item1[0],item2[0])))
+                
         self._logger.debug(f'Determined sub-domains {res}')
         return res
 
@@ -424,225 +395,148 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
     # SYMBOLIC EXPRESSION INTERFACE
     ####
     def _minimum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
-        res = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
+        exprs = list(set(exprs))
+
+        translated = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
         for assumption in self._assumptions.get(self._minimum.__name__):
-            res = assumption.validate(
-                res
+            translated = assumption.validate(
+                translated
             )
 
-        vals = [
-            val.expr if not isinstance(val.expr,Interval) else val.expr.low for val in res
+            # TODO
+            # At the moment, we expect the expression at the index i of exprs to equal the expression at the same index after the translation.
+            # If we were to support division within the translations, we require lists of lists to not loose the association between the initial and the translated expression(s).
+            # We therefore introduce the assumption : exprs[i] => res[i].expr && boundary == res[i].bound
+            #  
+            if len(translated) != len(exprs):
+                raise ValueError("It is not yet supported, to divide the domain of expressions within translations.")
+
+        candidates = [
+            val.expr if not isinstance(val.expr,Interval) else val.expr.low for val in translated
         ] 
 
-        self._logger.debug(f"Determining minimum for {vals}") 
+        self._logger.debug(f"Determining minima for {list(map(str,candidates))}") 
       
         # (1) Construct problem statements
-        problems = [Analysis(pf=val) for val in vals]
+        problems = [
+            Analysis(pf=candidate,d=boundary) for candidate in candidates
+            ]
 
-        # (2) Determine intersection for possible min/max switch
-        intersections = self.__intersections(problems,boundary)
-        self._logger.debug(f'Intersections : {intersections}')
+        # (2) Analyze expression
+        minima = self.analysis(problems=problems,d=boundary,method="min")
+        
+        # (3) Construct BoundedExpressions
+        res = []
+        
+        for i in range(len(minima)):
+            for boundary in minima[i]:
+                res.append(
+                    BoundedExpression(
+                        expression=problems[i].expr,
+                        boundary=boundary
+                    )
+                )
 
-        # (3) Analyze problems using intersections
-        res = [
-           BoundedExpression(
-               expression=problems[extremum].expr,
-               boundary=subdomain
-           )
-           for (extremum, subdomain) in self.__analysis(self.__min_eval,intersections=intersections,problems=problems,d=boundary)
-        ]
-
-        self._logger.debug(f"MIN({exprs}) => {res}")
+        self._logger.debug(f"MIN({list(map(str,exprs))}) => {list(map(str,res))}")
         return res
 
     def _maximum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
-        res = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
-        for assumption in self._assumptions.get(self._maximum.__name__):
-            res = assumption.validate(
-                res
+        exprs = list(set(exprs))
+
+        translated = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
+        for assumption in self._assumptions.get(self._minimum.__name__):
+            translated = assumption.validate(
+                translated
             )
 
-        vals = [
-            val.expr if not isinstance(val.expr,Interval) else val.expr.low for val in res
-        ]  
+            # TODO
+            # At the moment, we expect the expression at the index i of exprs to equal the expression at the same index after the translation.
+            # If we were to support division within the translations, we require lists of lists to not loose the association between the initial and the translated expression(s).
+            # We therefore introduce the assumption : exprs[i] => res[i].expr && boundary == res[i].bound
+            #  
+            if len(translated) != len(exprs):
+                raise ValueError("It is not yet supported, to divide the domain of expressions within translations.")
 
-        self._logger.debug(f"Determining maximum for {vals}")      
+        candidates = [
+            val.expr if not isinstance(val.expr,Interval) else val.expr.up for val in translated
+        ] 
+
+        self._logger.debug(f"Determining maxima for {list(map(str,candidates))}") 
       
         # (1) Construct problem statements
-        problems = [Analysis(pf=val) for val in vals]
+        problems = [
+            Analysis(pf=candidate,d=boundary) for candidate in candidates
+            ]
 
-        # (2) Determine intersection for possible min/max switch
-        intersections = self.__intersections(problems,boundary)
-        self._logger.debug(f'Intersections : {intersections}')
+        # (2) Analyze expression
+        minima = self.analysis(problems=problems,d=boundary,method="max")
 
-        # (3) Analyze problems using intersections
-        res = [
-           BoundedExpression(
-               expression=problems[extremum].expr,
-               boundary=subdomain
-           )
-           for (extremum, subdomain) in self.__analysis(self.__max_eval,intersections=intersections,problems=problems,d=boundary)
-        ]
-
+        # (3) Construct BoundedExpressions
+        res = []
+        
+        for i in range(len(minima)):
+            for boundary in minima[i]:
+                res.append(
+                    BoundedExpression(
+                        expression=problems[i].expr,
+                        boundary=boundary
+                    )
+                )
+        
         self._logger.debug(f"MAX({list(map(str,exprs))}) => {list(map(str,res))}")
         return res
 
     ####
     # INTERSECTION INTERFACE
     ####
-    def __min_eval(self, x0, x1,fs:List[Analysis]):
-        """Evaluate the minimum function within the given boundary."""
-        return self.__eval(fs=fs,x0=x0, x1=x1, order=lambda a, b: lt(a, b))
+    def analysis(self, problems: List[Expression], d:Domain, method:str="min"):
+        """TODO"""
+        from functools import reduce
+        from vodes.symbolic.expressions.bounded import intersect
 
-    def __max_eval(self, x0, x1,fs:List[Analysis]):
-        """Evaluate the maximum function within the given boundary."""
-        return self.__eval(fs=fs,x0=x0, x1=x1, order=lambda a, b: gt(a, b))
+        if len(problems) == 0:
+            raise ValueError("Supplied no candidates for analysis.")
 
-    def __eval(self, order, x0, x1, fs:List[Analysis]):
-        """Evaluate problems between two values and determine the extremum using the given order function.
+        if method=="min":
+            cmp = lambda l,r: l<=r
+        elif method=="max":
+            cmp = lambda l,r: l>=r
+        else:
+            raise ValueError(f"Not supporting method {method}")
 
-        Args:
-            fs: Problems to evaluate.
-            x0: Start of the section
-            x1: End of the section
-            order: Defines the comparison between function value (e.g. <, >).
-        
-        Returns:
-            __eval: 
-        """
-        values = [None] * len(fs)
-        x = x0 + (x1-x0)/2
+        # Example : len(pr) = 4
+        # 
+        # | d                    pr[0] > pr[1]        pr[0] > pr[2]       pr[0] > pr[3] |
+        # | ask(pr[0] <= pr[1])  d                    pr[1] > pr[2]       pr[1] > pr[3] |
+        # | ask(pr[0] <= pr[2])  ask(pr[1] <= pr[2])  d                   pr[2] > pr[3] |
+        # | ask(pr[0] <= pr[3])  ask(pr[1] <= pr[3])  ask(pr[2] <= pr[3]) d             |
+        #
 
-        self._logger.debug(f'Evaluating {list(map(lambda f:f.func,fs))} at {x} ({x0}, {x1})')
+        res = [[[] for j in range(len(problems))] for i in range(len(problems))]
 
-        for i in range(0, len(fs)):
-            values[i] = fs[i].evaluate(x)
-        
-        result = (0, values[0])
-        for i in range(1, len(fs)):
-            if order(values[i], result[1]):
-                result = (i, values[i])
-            elif result[1] == values[i]:
-                # TODO : Take this from the intersection, where equivalence would be returned in terms of domain -> Less function evaluation
-                # As the evaluation takes places between two intersections, the functions must be equivalent, as only these cases of identical values are not contained within the intersections.
-                self._logger.info(f'Encountered equivalent functions {fs[result[0]].func} and {fs[i].func} within the section.')
+        extrema = [None for i in range(len(problems))]
 
-        return result[0]
+        for i in range(len(problems)):
+            # (1) Insert irrelevant comparisons 
+            res[i][i] = [d]
 
-    def __analysis(self, eval, intersections: list, problems: List[Analysis], d:Domain):
-        """Evaluate the extremas (e.g. minima, maxima) of the given functions within the boundary and return a list of them with their respective boundary."""
-        res = []
+            # (2) Fill upper triangular matrix incorporating previous results
+            # TODO : Rethink how to limit comparisons, as seen in the previous example, without redundant splitting for e.g. equal equations
+            # res[i][j] = d.difference(res[j][i])
+            for j in range(i):
+                res[i][j] = problems[i].compare(problems[j],cmp,d=d)
 
-        lv,lo = d.start,d.left_open
-        candidates = [i for i in range(len(problems))]
-        
-        # There is still domain left to analyze
-        is_analyzed = False
-        while not is_analyzed:
-            x0 = lv
+            # (3) Fill lower triangular matrix with comparison results
+            for j in range(i+1,len(problems)):
+                res[i][j] = problems[i].compare(problems[j],cmp,d=d)
 
-            # Determine the next possible intersection
-            xs = [item for sublist in intersections for subsublist in sublist for item in subsublist if gt(item,x0)]
-            xs.append(d.end)
-
-            x1 = minimum(xs)
-
-            # Determine extremum
-            extr_i = candidates[
-                eval(
-                    x0=x0,
-                    x1=x1,
-                    fs=[problems[i] for i in candidates]
-                    )
-                ]
-
-            # Determine sub-domain
-            rv,ro = d.end, d.right_open
-            for i in range(len(intersections[extr_i])):
-                xs = [item for item in intersections[extr_i][i] if gt(item,x0) and le(item,rv)]
-
-                if len(xs) == 0:
-                    continue
-                else:
-                    t = minimum(xs)
-
-                    if lt(t, rv):
-                        # mawarny be tangent
-                        candidates = [extr_i, i]
-
-                        rv,ro = t,True
-                    else:
-                        candidates.append(i)
-                    
-            boundary=Domain(lv,rv,lo,ro) 
-            self._logger.debug(f'Extrema : {problems[extr_i].func} within {boundary}')
-
-            res.append(
-                (extr_i, boundary)
+            # (4) Store result
+            extrema[i] = reduce(
+                lambda a,b: intersect(a,b),
+                res[i]
             )
 
-            lv,lo = rv, not ro
-
-            # Finalize, if domain was fully analyzed
-            is_analyzed = lv == d.end
-
-        return res
-
-    def __intersection(self, f:Analysis, g:Analysis, d: Domain):
-        """Determine the real intersections of two functions for the given boundary. Intersections at the boundary values are ignored.
-
-        Args:
-            f: Function to intersect with g.
-            g: Function to intersect with f.
-            b: Boundary to limit the possible values for the intersections.
-
-        Returns:
-            __intersection: A (possibly empty) list of intersections between f and g.
-        """
-        answer = f.equals(
-            g.func,
-            Domain(
-                d.start,
-                d.end,
-                True,
-                True
-            )
-        )
-
-        res = []
-
-        # TODO : Make use of domains
-        for domain in answer:
-            if domain.start != domain.end:
-                self._logger.info(f'Dropping {domain} as domains are not yet fully supported.')
-                continue
-
-            res.append(domain.start)
-        
-        return res
-
-    def __intersections(self, fs:List[Analysis], d: Domain):
-        """Determine the real intersections for a list of functions within the given boundary. Intersections at the boundary values are ignored.
-
-        Args:
-            fs: Functions to evaluate.
-            b: Boundary to limit the possible values for the intersections.
-        
-        Returns:
-            __intersections: A 3D array of intersections. [i][j]=[x1,x2] -> The function i (position within fs) intersects the function j at the values x1,x2 within the boundary.
-        """
-        intersections = [[[] for j in range(len(fs))] for i in range(len(fs))]
-
-        for i in range(0, len(fs)):
-            for j in range(0, len(fs)):
-                if i == j:
-                    continue
-
-                intersections[i][j] = self.__intersection(fs[i], fs[j], d)
-                intersections[j][i] = intersections[i][j]
-        
-        return intersections
-
+        return extrema
 
     ####
     # UTILITY FUNCTIONS
@@ -710,15 +604,22 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
 
         Returns:
             __merge_bounded_results: List of 2-element tuples."""
+        from vodes.symbolic.utils import eq
 
         rs_merged = [rs[0]]
-
         for i in range(len(rs) - 1):
             if rs_merged[-1][0] == rs[i+1][0]:
+                union = rs_merged[-1][1].union(rs[i+1][1])
+
                 rs_merged[-1] = (
                     rs_merged[-1][0],
-                    rs_merged[-1][1].union(rs[i+1][1])
+                    union[0]
                 )
+
+                for j in range(1,len(union)):
+                    rs_merged.append(
+                        (rs[i+1][0],union[j])
+                    )
             else:  
                 rs_merged.append(rs[i+1])
 
@@ -732,6 +633,3 @@ class IntersectionEvaluator(ExactIntervalEvaluator):
                 self.__merge_bounded_results(list(map(lambda bexpr : (bexpr.expr,bexpr.bound),bexprs)))
             ) 
         )
-
-
-    

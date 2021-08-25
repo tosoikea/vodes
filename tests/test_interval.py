@@ -19,21 +19,21 @@ from tests.utils import assert_bounded_iv_equations
 
 @pytest.fixture
 def evaluators():
-    from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
+    from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as CE
     
     return [
-        lambda c,s : IE(context=c, symbol=s)
+        lambda c,s : CE(context=c, symbol=s)
     ]
 
 @pytest.fixture
 def static_evaluators():
     from vodes.symbolic.mapper.taylor_intersection_evaluator import TaylorIntersectionEvaluator as TE
-    from vodes.symbolic.mapper.intersection_evaluator import IntersectionEvaluator as IE
+    from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as CE
     from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
 
     return [
        SE(context={}, symbol=DummyVariable()),
-       IE(context={}, symbol=DummyVariable()),
+       CE(context={}, symbol=DummyVariable()),
        TE(context={}, symbol=DummyVariable())
     ]
 
@@ -189,8 +189,8 @@ def test_interval_pow1(evaluators):
     #   b) 0 <= f([-2,-1]), 0 >= f([-1,2])
     # 4. 
     # =>    [-2,-1) min : (x+1)**2 ,   max : (x-1)**2
-    #       [-1, 0) min : 0        ,   max : (x-1)**2
-    #       [0 , 1] min : 0        ,   max : (x+1)**2
+    #       [-1, 0] min : 0        ,   max : (x-1)**2
+    #       (0 , 1] min : 0        ,   max : (x+1)**2
     #       (1 , 2] min : (x-1)**2 ,   max : (x+1)**2
 
     e = [
@@ -208,8 +208,7 @@ def test_interval_pow1(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=-1,
-                end=0,
-                right_open=True
+                end=0
             ),
             expression=Interval(
                 lower=0,
@@ -219,7 +218,8 @@ def test_interval_pow1(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=0,
-                end=1
+                end=1,
+                left_open=True
             ),
             expression=Interval(
                 lower=0,
@@ -244,7 +244,7 @@ def test_interval_pow1(evaluators):
     for eval in evaluators:
         #Act
         a = eval(context,symbol)(p)
-
+        print(list(map(str,a)))
         #Assert
         assert_bounded_iv_equations(a,e)
 

@@ -1,12 +1,12 @@
 from sys import intern
 from pymbolic.mapper.stringifier import PREC_NONE, StringifyMapper
-from pymbolic.primitives import Expression
+from vodes.symbolic.expressions.primitives import ExtendedExpression
 
 ##
 # src : https://link.springer.com/content/pdf/10.1007/3-540-36599-0_7.pdf
 # src : https://www.math.kit.edu/ianm2/~kulisch/media/arjpkx.pdf
 ###
-class Interval(Expression):
+class Interval(ExtendedExpression):
     """Class to represent an interval, as defined within interval analysis, as expression.
 
     Args:

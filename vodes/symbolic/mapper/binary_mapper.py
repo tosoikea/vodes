@@ -1,4 +1,5 @@
 import logging
+from vodes.symbolic.expressions.primitives import Subtraction
 
 from pymbolic.mapper import RecursiveMapper
 from pymbolic.primitives import Sum, Product
@@ -43,6 +44,11 @@ class BinaryMapper(RecursiveMapper):
         self._logger.debug(f'{expr} -> {res}')
         return res
 
+    def map_sub(self, expr): 
+        res =  self.__split(lambda a,b : Subtraction((a,b)), expr)
+        self._logger.debug(f'{expr} -> {res}')
+        return res
+
     def map_product(self, expr):
         res = self.__split(lambda a,b : Product((a,b)), expr)
         self._logger.debug(f'{expr} -> {res}')
@@ -56,6 +62,10 @@ class BinaryMapper(RecursiveMapper):
     def map_quotient(self, expr):
         return expr
 
+    # always binary (base, exponent)
+    def map_power(self, expr):
+        return expr
+        
     # always unary
     def map_constant(self, expr):
         return expr
@@ -63,7 +73,11 @@ class BinaryMapper(RecursiveMapper):
     # always unary
     def map_variable(self, expr):
         return expr
+        
+    # always unary
+    def map_sin(self, expr):
+        return expr
 
-    # always binary (base, exponent)
-    def map_power(self, expr):
+    # always unary
+    def map_cos(self, expr):
         return expr

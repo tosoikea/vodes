@@ -11,7 +11,7 @@ from vodes.symbolic.expressions.interval import Interval
 from vodes.error.mapper import AffineMapper, IntervalMapper
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
-from vodes.symbolic.mapper.taylor_intersection_evaluator import IntersectionEvaluator as IE
+from vodes.symbolic.mapper.taylor_intersection_evaluator import TaylorIntersectionEvaluator as IE
 
 # Symbolic Expression
 from pymbolic.primitives import Expression, Power
@@ -67,7 +67,7 @@ class Analysis(ABC):
 
         for bexpr in self._absolute:
             # TODO : handle open intervals
-            from pymbolic import evaluate
+            from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
             start = evaluate(bexpr.bound.start)
             end = evaluate(bexpr.bound.end)
             
@@ -87,7 +87,6 @@ class Analysis(ABC):
             else:
                 raise ValueError("Ecountered too many free variables.")
 
-            print(ys)
             pyplot.plot(xs,ys)
 
             max_v = max(ys) if max_v is None else max(max(ys),max_v)
