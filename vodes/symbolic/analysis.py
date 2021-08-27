@@ -15,16 +15,31 @@ from pymbolic.primitives import Expression
 # Mapper
 from pymbolic.interop.sympy import SympyToPymbolicMapper
 
+class AnalysisConfig:
+    @property
+    def dom(self):
+        """Get or set the lower boundary of the interval"""
+        return self.__domain
+
+    @property
+    def denominator_limit(self):
+        """Get or set the lower boundary of the interval"""
+        return self.__limit
+
+    def __init__(self, limit:int=None,d:Domain=None):
+        # TODO : Complex support
+        self.__domain = Domain(NegativeInfinity(),Infinity(),left_open=True,right_open=True) if d is None else d
+        self.__limit = 10**3 if limit is None else limit
+
+        assert self.__limit > 0
+
 class Analysis:
-    def __init__(self, pf:Expression, d:Domain=None) -> None:
+    def __init__(self, pf:Expression, config:AnalysisConfig=None) -> None:
         from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as Evaluator
 
         assert not (pf is None)
         self.__pf = pf
         self.__f = ExactPymbolicToSympyMapper()(self.__pf)
-
-        # TODO : Complex support
-        self.__domain = Domain(NegativeInfinity(),Infinity(),left_open=True,right_open=True) if d is None else d
 
         if len(self.__f.free_symbols) > 1:
             raise ValueError("Not supporting functions with more than one free variable. Consider encoding the parameter as a vector.")
@@ -40,7 +55,7 @@ class Analysis:
             self._evaluator = None
 
         self._logger = logging.getLogger(__name__)
-        self.__limit = 10**3
+        self._config = AnalysisConfig() if config is None else config
 
     @property
     def func(self):
@@ -61,7 +76,7 @@ class Analysis:
         ask = self.__f - y
 
         if d is None:
-            d =  self.__domain
+            d =  self._config.dom
 
         return self._solve(ask,d=d)
 
@@ -73,7 +88,7 @@ class Analysis:
             cmp_prob = Analysis(problem)
 
         if d is None:
-            d =  self.__domain
+            d =  self._config.dom
 
         ask = comparison(self.func,cmp_prob.func)
         return self._solve(ask,d=d)
@@ -119,13 +134,13 @@ class Analysis:
 
         # Boundary values
         vals = [
-            self.__domain.start,
-            self.__domain.end
+            self._config.dom.start,
+            self._config.dom.end
         ]
 
         f_diff = diff(f,self.symbol)
 
-        for r in self._solve(f_diff,self.__domain):
+        for r in self._solve(f_diff,self._config.dom):
             if r.start != r.end:
                 self._logger.warning(f'Dropping {r} as domains are not yet fully supported')
 
@@ -174,7 +189,7 @@ class Analysis:
             return [
                 BoundedExpression(
                     expression=Interval(self.func),
-                    boundary=self.__domain
+                    boundary=self._config.dom
                 )
             ]
 
@@ -204,12 +219,12 @@ class Analysis:
                 minimize_func = -abs(r_n)
 
                 r_n_func = lambdify(list(r_n.free_symbols),minimize_func)
-                if isinstance(self.__domain.start,NegativeInfinity) and isinstance(self.__domain.end,Infinity):
+                if isinstance(self._config.dom.start,NegativeInfinity) and isinstance(self._config.dom.end,Infinity):
                     res = minimize_scalar(r_n_func)
                 else:
                     # TODO : We may limit our boundary here using the evaluation
-                    b_left = None if isinstance(self.__domain.start, NegativeInfinity) else evaluate(self.__domain.start)
-                    b_right = None if isinstance(self.__domain.end, Infinity) else evaluate(self.__domain.end)
+                    b_left = None if isinstance(self._config.dom.start, NegativeInfinity) else evaluate(self._config.dom.start)
+                    b_right = None if isinstance(self._config.dom.end, Infinity) else evaluate(self._config.dom.end)
                     res = minimize_scalar(r_n_func, bounds=(b_left, b_right), method='bounded')
 
                 if not res.success:
@@ -221,11 +236,11 @@ class Analysis:
 
         # TODO : Under & Overflow -> Determine the error accordingly
         m = float(m)
-        m_approx = Fraction(m).limit_denominator(self.__limit)
+        m_approx = Fraction(m).limit_denominator(self._config.denominator_limit)
 
         # This is allowed, as we only increase the size of our constant M while still upholding the inequality M >= |R_n(x)|
-        if abs(m) < (1/self.__limit) and m != 0:
-            m_approx = Fraction(1,self.__limit)
+        if abs(m) < (1/self._config.denominator_limit) and m != 0:
+            m_approx = Fraction(1,self._config.denominator_limit)
 
         #TODO Verallgemeinern für (n+1) uneven
         c = m_approx * Pow(factorial(n+1),-1) * (self.symbol - a)**(n+1)
@@ -236,8 +251,8 @@ class Analysis:
             SympyToPymbolicMapper()(t_n + c)
         ]
 
-        lower = self._evaluator._minimum(exprs,self.__domain)
-        upper = self._evaluator._maximum(exprs,self.__domain)
+        lower = self._evaluator._minimum(exprs,self._config.dom)
+        upper = self._evaluator._maximum(exprs,self._config.dom)
 
         return [
             BoundedExpression(

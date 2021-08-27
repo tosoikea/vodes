@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from vodes.symbolic.analysis import Analysis
+from vodes.symbolic.analysis import Analysis, AnalysisConfig
 
 # Assumption library
 from vodes.symbolic.translations.to_scalar import ToScalar
@@ -359,13 +359,13 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             if not ("up" in incl) :
                 upper_contained = [d]
             else:
-                upper = Analysis(bexpr.expr.up,bexpr.bound)
+                upper = Analysis(bexpr.expr.up,config=AnalysisConfig(d=bexpr.bound))
                 upper_contained = upper.compare(val,lambda u,v: u>=v)
 
             if not ("low" in incl) :
                 lower_contained = [d]
             else:
-                lower = Analysis(bexpr.expr.low,bexpr.bound)
+                lower = Analysis(bexpr.expr.low,config=AnalysisConfig(d=bexpr.bound))
                 lower_contained = lower.compare(val,lambda l,v: l<=v)
 
             for u in upper_contained:
@@ -419,7 +419,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
       
         # (1) Construct problem statements
         problems = [
-            Analysis(pf=candidate,d=boundary) for candidate in candidates
+            Analysis(pf=candidate,config=AnalysisConfig(d=boundary)) for candidate in candidates
             ]
 
         # (2) Analyze expression
@@ -465,7 +465,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
       
         # (1) Construct problem statements
         problems = [
-            Analysis(pf=candidate,d=boundary) for candidate in candidates
+            Analysis(pf=candidate,config=AnalysisConfig(d=boundary)) for candidate in candidates
             ]
 
         # (2) Analyze expression

@@ -35,8 +35,8 @@ class ToTaylor(Translation):
             return self._translation(expr.expr,boundary=expr.bound)
         
     def _translation(self,expr:Expression,boundary:Domain) -> List[BoundedExpression]:
-        from vodes.symbolic.analysis import Analysis
+        from vodes.symbolic.analysis import Analysis, AnalysisConfig
 
         # TODO : Evaluate expansion point
-        return Analysis(expr,d=boundary).taylor(n=self.n-1)
+        return Analysis(expr,config=AnalysisConfig(d=boundary)).taylor(n=self.n-1)
 

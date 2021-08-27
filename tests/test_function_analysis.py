@@ -4,7 +4,7 @@ import pytest
 
 from random import randrange
 
-from vodes.symbolic.analysis import Analysis
+from vodes.symbolic.analysis import Analysis, AnalysisConfig
 from vodes.symbolic.expressions.interval import Interval
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 
@@ -128,7 +128,7 @@ def test_inclusion_quadratic1():
     p = b + a1 * x + a2 * x**2
     d = None
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -151,7 +151,7 @@ def test_inclusion_quadratic2():
     p = b + a1 * x + a2 * x**2
     d = None
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -174,7 +174,7 @@ def test_inclusion_quadratic3():
     p = a0 + a1 * x + a2 * x**2
     d = None
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -198,7 +198,7 @@ def test_inclusion_cubic1():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3
     d = None
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act & Assert
     try:
@@ -218,7 +218,7 @@ def test_inclusion_cubic2():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3
     d = Domain(0,1)
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -242,7 +242,7 @@ def test_inclusion_cubic3():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3
     d = Domain(randrange(-2,2),randrange(2,6))
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -267,7 +267,7 @@ def test_inclusion_cubic4():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3
     d = Domain(randrange(-2,2),randrange(2,6))
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -292,7 +292,7 @@ def test_inclusion_cubic5():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3
     d = Domain(randrange(-2,2),randrange(2,6))
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -318,7 +318,7 @@ def test_inclusion_quartic1():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4
     d = None
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act & Assert
     try:
@@ -345,7 +345,7 @@ def test_inclusion_quartic2():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4
     d = Domain(0,1)
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -372,7 +372,7 @@ def test_inclusion_quartic3():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4
     d = Domain(randrange(-2,2),randrange(2,6))
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
@@ -399,7 +399,7 @@ def test_inclusion_quartic4():
     p = a0 + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4
     d = Domain(randrange(-2,2),randrange(2,6))
 
-    an = Analysis(p,d=d)
+    an = Analysis(p,config=AnalysisConfig(d=d))
 
     # Act
     res = [
