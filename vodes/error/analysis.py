@@ -34,6 +34,7 @@ class Analysis(ABC):
         self._logger = logging.getLogger(__name__)
         self._problem = BM()(problem)
         self._absolute = None
+        self._precision = None
 
     @abstractmethod
     def absolute(self, context:dict, min_precision:int, max_precision:int) -> list:
@@ -53,47 +54,14 @@ class Analysis(ABC):
         pass
 
     def show(self, ticks=100):
-        from matplotlib import pyplot
-        from sympy import Float
-        from numpy import linspace
-        from math import ceil
+        from vodes.error.utils import show, AnalysisSolution
 
         #from numpy.core.function_base import linspace
 
         if self._absolute is None:
             raise ValueError("No absolute error calculated")
 
-        max_v = None
-
-        for bexpr in self._absolute:
-            # TODO : handle open intervals
-            from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
-            start = evaluate(bexpr.bound.start)
-            end = evaluate(bexpr.bound.end)
-            
-            # TODO : Implement scaling based on sub-domain length
-            bticks = ticks
-
-            expr_err = ExactPymbolicToSympyMapper()(bexpr.expr)
-
-            xs = linspace(start, end, num=bticks)
-
-            if len(expr_err.free_symbols) == 0:
-                y = expr_err.evalf(512)
-                ys = [y for x in xs]
-            elif len(expr_err.free_symbols) == 1:
-                sym = expr_err.free_symbols.pop()
-                ys = [expr_err.subs(sym,Float(x,512)).evalf(512) for x in xs]
-            else:
-                raise ValueError("Ecountered too many free variables.")
-
-            pyplot.plot(xs,ys)
-
-            max_v = max(ys) if max_v is None else max(max(ys),max_v)
-
-        pyplot.xscale('log',base=2)
-        pyplot.grid(True)
-        pyplot.show()
+        show(solutions=[AnalysisSolution(bexprs=self._absolute)],min_prec=self._precision[0],max_prec=self._precision[1])
 
 
 class IntervalAnalysis(Analysis):
@@ -119,6 +87,7 @@ class IntervalAnalysis(Analysis):
         err = Abs(self._problem - self.__expr)
         self._logger.info(f'Error : {err}')
 
+        self._precision = (min_precision,max_precision)
         self._absolute = IE(
             context=context,
             symbol=MachineError(
@@ -222,6 +191,7 @@ class TaylorAnalysis(Analysis):
         err = eps * Abs(t_t1) + Power(eps,2) * Abs(eps_r1)
         self._logger.info(f'Approximative Error : {err}')
 
+        self._precision = (min_precision,max_precision)
         self._absolute = IE(
             context=context,
             symbol=eps
