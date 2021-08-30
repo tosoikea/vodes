@@ -5,9 +5,13 @@ from vodes.symbolic.expressions.bounded import BoundedExpression, MachineError
 
 class Solution(ABC):
     """Class to represent solution to an error analysis problem"""
-
     @abstractmethod
     def error(self, prec:int):
+        pass
+
+    @property
+    def name(self):
+        """Get or set the name of the solution"""
         pass
 
 class PseudoExactSolution(Solution):
@@ -25,11 +29,17 @@ class PseudoExactSolution(Solution):
         # 113 ~ exact solution
         self.expected = self.__calculate(113)
 
+    @property
+    def name(self):
+        """Get the name of the solution"""
+        return "Exact"
+
     def error(self, prec:int):
         return abs(self.expected -  self.__calculate(prec))
 
+
 class AnalysisSolution(Solution):
-    def __init__(self, bexprs:List[BoundedExpression]):
+    def __init__(self, bexprs:List[BoundedExpression], name:str):
         super().__init__()
 
         self.bexprs = [
@@ -37,6 +47,13 @@ class AnalysisSolution(Solution):
                 expression=ExactPymbolicToSympyMapper()(bexpr.expr),
                 boundary=bexpr.bound
             )for bexpr in bexprs]
+
+        self.__name = name
+
+    @property
+    def name(self):
+        """Get the name of the solution"""
+        return self.__name
 
     def error(self, prec: int):
         from sympy import Float
@@ -68,7 +85,8 @@ def show(solutions:List[Solution],min_prec:int=11,max_prec:int=53):
         for x in xs:
             ys.append(sol.error(prec=x))
     
-        pyplot.plot(xs,ys)
+        pyplot.plot(xs,ys, label=sol.name)
 
     pyplot.grid(True)
+    pyplot.legend()
     pyplot.show()

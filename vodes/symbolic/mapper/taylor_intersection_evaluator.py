@@ -28,14 +28,14 @@ class TaylorIntersectionEvaluator(ComparisonEvaluator):
         
         self._assumptions["_minimum"] = [
                 Assumption(
-                    property=IsPolynomial(),
+                    property=IsPolynomial(n=4),
                     translation=ToTaylor(n=2)
                 )
             ]
 
         self._assumptions["_maximum"] = [
                 Assumption(
-                    property=IsPolynomial(),
+                    property=IsPolynomial(n=4),
                     translation=ToTaylor(n=2)
                 )
             ]

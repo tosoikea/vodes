@@ -10,9 +10,10 @@ from vodes.symbolic.expressions.interval import Interval
 from pymbolic.primitives import Expression
 
 class ToTaylor(Translation):
-    def __init__(self,n:int=4):
+    def __init__(self,n:int=4,limit=2**16):
         assert n > 0
         self.n = n
+        self.limit = limit
         
     """Provides taylor expansion for expression"""
     def translate(self, expr:BoundedExpression) -> List[BoundedExpression]:
@@ -21,22 +22,27 @@ class ToTaylor(Translation):
         if isinstance(expr.expr,Interval):
             lower = [bexpr.expr.low for bexpr in self._translation(expr.expr.low,boundary=expr.bound)]
             upper = [bexpr.expr.up for bexpr in self._translation(expr.expr.up,boundary=expr.bound)]
-
-            return [
+    
+            res = [
                 BoundedExpression(
                     expression=Interval(
                         lower=left,
                         upper=right
                     ),
                     boundary=boundary
-                ) for (left,right,boundary) in merge(lower,upper)
+                ) for ((left,right),boundary) in merge(lower,upper)
             ]
         else:
-            return self._translation(expr.expr,boundary=expr.bound)
+            res = self._translation(expr.expr,boundary=expr.bound)
+
+        assert (len(res) == 1)
+
+        return res
         
     def _translation(self,expr:Expression,boundary:Domain) -> List[BoundedExpression]:
         from vodes.symbolic.analysis import Analysis, AnalysisConfig
 
         # TODO : Evaluate expansion point
-        return Analysis(expr,config=AnalysisConfig(d=boundary)).taylor(n=self.n-1)
+        res = Analysis(expr,config=AnalysisConfig(d=boundary,limit=self.limit)).taylor(n=self.n-1)
+        return res
 

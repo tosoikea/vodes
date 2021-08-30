@@ -92,8 +92,13 @@ class Domain:
         if not isinstance(other,Domain):
             raise TypeError(f"Invalid type {type(other)} for intersection of domains.")
 
-        # (1) Is outside
-        if self.start > other.end or self.end < other.start:
+        # (1) Is not neighboring
+        if (
+            gt(self.start,other.end) or 
+            lt(self.end,other.start) or 
+            (eq(self.start,other.end) and self.left_open and other.right_open) or 
+            (eq(self.end,other.start) and self.right_open and other.left_open)
+        ):
             return [self,other]
         # (2) Expand
         else: 
@@ -109,7 +114,7 @@ class Domain:
             if gt(other.end,self.end):
                 (rv,ro) = (other.end,other.right_open)
             elif eq(other.end,self.end):
-                lo = other.right_open and self.right_open
+                ro = other.right_open and self.right_open
 
             return [Domain(lv,rv,lo,ro)]
 
@@ -258,18 +263,6 @@ class MachineError(BoundedVariable):
             )
         )
 
-class Noise(BoundedVariable):
-    def __init__(self,index:str):
-        super().__init__(
-            name=f'eps_{index}',
-            boundary=Domain(
-                # open if value unreachable
-                start=-MachineError(),
-                # open if value unreachable
-                end=MachineError()
-            )
-        )
-
 class DummyVariable(BoundedVariable):
     def __init__(self):
         super().__init__(
@@ -285,8 +278,13 @@ class DummyVariable(BoundedVariable):
 ####
 # Utility Functions
 ####   
-def is_outside(r:Domain,other:Domain) -> bool:
-    return (gt(r.start,other.end) or lt(r.end,other.start)) or (eq(r.start,other.end) and (r.left_open or other.right_open)) or (eq(r.end,other.start) and (r.right_open or r.left_open))
+def is_outside(l:Domain,r:Domain) -> bool:
+    return (
+        gt(l.start,r.end) or 
+        lt(l.end,r.start) or 
+        (eq(l.start,r.end) and (l.left_open or r.right_open)) or 
+        (eq(l.end,r.start) and (l.right_open or r.left_open))
+    )
     
 def intersect(ls:list,rs:list):
     res = []

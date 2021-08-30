@@ -1,11 +1,11 @@
 from vodes.symbolic.expressions.primitives import Subtraction
 from vodes.symbolic.expressions.trigonometric import sin, cos
 from vodes.symbolic.expressions.nthroot import NthRoot
-from vodes.symbolic.expressions.bounded import MachineError, Noise
+from vodes.symbolic.expressions.bounded import MachineError
 from vodes.symbolic.expressions.interval import Interval
 
 from pymbolic.mapper import RecursiveMapper
-from pymbolic.primitives import Power
+from pymbolic.primitives import Power, Variable
 
 class ErrorMapper(RecursiveMapper):
     def __init__(self):
@@ -86,8 +86,7 @@ class AffineMapper(ErrorMapper):
     def ids(self):
         """Get the mapping from ids to expressions"""
         return self.__ids
-
-
+        
     def __error(self, expr):
         expr_id = str(expr)
 
@@ -98,7 +97,7 @@ class AffineMapper(ErrorMapper):
 
             self.__ids[expr_id] = t
 
-        eps = Noise(index=self.__ids[expr_id])
+        eps = Variable(name=f'eps_{self.__ids[expr_id]}')
 
         if not eps.name in self.__exact:
             self.__noises.append(eps)
@@ -111,6 +110,11 @@ class AffineMapper(ErrorMapper):
 
     def map_sum(self, expr):
         return sum(self.rec(child) for child in expr.children) * (1 + self.__error(expr))
+
+    def map_sub(self, expr):
+        assert len(expr.children) == 2
+
+        return Subtraction(tuple([self.rec(child) for child in expr.children])) * (1 + self.__error(expr))
 
     def map_product(self, expr):
         from pytools import product
@@ -125,3 +129,12 @@ class AffineMapper(ErrorMapper):
     # TODO : Constants can also introduce rounding error
     def map_interval(self, expr):
         return expr
+
+    def map_nthroot(self, expr):
+        return NthRoot(self.rec(expr.expr),expr.n) * (1 + self.__error(expr))
+
+    def map_sin(self, expr):
+        return sin(self.rec(expr.expr)) * (1 + self.__error(expr))
+
+    def map_cos(self, expr):
+        return cos(self.rec(expr.expr)) * (1 + self.__error(expr))

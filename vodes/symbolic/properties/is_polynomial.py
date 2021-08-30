@@ -15,7 +15,7 @@ class IsPolynomial(Property):
     def verify(self, expr:BoundedExpression) -> bool:
         """Determines, if the expression is constant"""
         verify = [expr.expr.low,expr.expr.up] if isinstance(expr.expr,Interval) else [expr.expr]
-    
+
         return all(
             map(
                 self._verification,

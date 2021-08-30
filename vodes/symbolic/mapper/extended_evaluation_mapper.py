@@ -1,3 +1,4 @@
+from vodes.symbolic.expressions.nthroot import NthRoot
 from pymbolic.mapper.evaluator import EvaluationMapper
 from math import pi, sin, cos
 
@@ -11,7 +12,7 @@ class ExtendedEvaluationMapper(EvaluationMapper):
     # FUNCTIONS
     ###
     def map_nthroot(self,expr):
-        raise NotImplementedError()
+        return evaluate(self.rec(expr.expr)**(1/expr.n))
 
     def map_sin(self, expr):
         return sin(

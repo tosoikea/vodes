@@ -109,7 +109,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
                                 upper=right
                             ),
                             boundary=boundary
-                        ) for (left,right,boundary) in merge(lower,upper)
+                        ) for ((left,right),boundary) in merge(lower,upper)
                     ]
                 )
 
@@ -129,6 +129,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         Returns:
             _iadd: A list of BoundedExpressions containing the result of the addition (interval), possibly limited to subsets of the initial boundary, that may in sum not be equal to the initial boundary.
         """
+        self._logger.info('==INTERVAL ADD==')
         return [
             BoundedExpression(
                 expression=Interval(l.low + r.low, l.up + r.up),
@@ -147,6 +148,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         Returns:
             _isub: A list of BoundedExpressions containing the result of the substitution (interval), possibly limited to subsets of the initial boundary, that may in sum not be equal to the initial boundary.
         """
+        self._logger.info('==INTERVAL SUB==')
         return [
             BoundedExpression(
                 expression=Interval(l.low - r.up, l.up - r.low),
@@ -166,6 +168,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             _imul: A list of BoundedExpressions containing the result of the symbolic multiplication (interval), possibly limited to subsets of the initial boundary.
         """
         from vodes.symbolic.utils import merge
+        self._logger.info('==INTERVAL MUL==')
 
         exprs = [
                 l.low * r.low, 
@@ -184,7 +187,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
                     upper=right
                 ),
                 boundary=boundary
-            ) for (left,right,boundary) in merge(lower,upper)
+            ) for ((left,right),boundary) in merge(lower,upper)
         ]
 
     def _idiv(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
@@ -198,6 +201,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         Returns:
             _idiv: A list of BoundedExpressions containing the result of the division (interval), possibly limited to subsets of the initial boundary, that may in sum not be equal to the initial boundary.
         """
+        self._logger.info('==INTERVAL DIV==')
         rmin, rmax = r.low, r.up
         inclusion = self.contains(iv=r,xs=0,d=d)
 
@@ -227,6 +231,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         """
         from vodes.symbolic.utils import lt,gt,eq
         from vodes.symbolic.mapper.simplification_mapper import simplify
+        self._logger.info('==INTERVAL POW==')
 
         # TODO : Maybe convert to scalar interval, requires support for interval exponentiation
         exprs = [
@@ -289,7 +294,9 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             raise ValueError(f"Not supporting exponent {exponent}({exponent.__class__}). Please use the underyling constructs (exp,log,nth-root)...")
 
     def _iabs(self, i:Interval, d:Domain) -> List[BoundedExpression]:
-        return self._maximum(
+        from vodes.symbolic.utils import merge_unary
+        self._logger.info('==INTERVAL ABS==')
+        res = self._maximum(
             exprs=[
                 i.up,
                 (-1) * i.low
@@ -297,8 +304,18 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             boundary=d
         )
 
+        # Maximum may return multiple equivalent expressions within an equivalent domain
+        # Merge them using the domains
+        return [
+            BoundedExpression(
+                expression=left,
+                boundary=boundary
+            ) for (left,boundary) in merge_unary(res)
+        ] 
+
     def _inthroot(self, i:Interval, n:int, d:Domain) -> List[BoundedExpression]:
         from vodes.symbolic.expressions.infinity import NegativeInfinity
+        self._logger.info('==INTERVAL NTHROOT==')
 
         invalid_bounds = Domain(
                         start=NegativeInfinity(),
@@ -331,14 +348,17 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         return res
 
     def _isin(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        self._logger.info('==INTERVAL SIN==')
         raise NotImplementedError()
 
     def _icos(self, i:Interval, d:Domain) -> List[BoundedExpression]:
+        self._logger.info('==INTERVAL COS==')
         raise NotImplementedError()
 
     def _icontains(self, expr:Interval, val, d: Domain, incl:set=set(("up","low"))) -> list:
         """Determines if the provided symbolic interval contains the supplied value within the given domain."""
         from functools import cmp_to_key
+        self._logger.info('==INTERVAL CONTAINS==')
 
         exprs = [
             BoundedExpression(expression=expr,boundary=d),
@@ -396,7 +416,6 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
     ####
     def _minimum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
         exprs = list(set(exprs))
-
         translated = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
         for assumption in self._assumptions.get(self._minimum.__name__):
             translated = assumption.validate(
@@ -607,10 +626,9 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         from vodes.symbolic.utils import eq
 
         rs_merged = [rs[0]]
-        for i in range(len(rs) - 1):
-            if rs_merged[-1][0] == rs[i+1][0]:
-                union = rs_merged[-1][1].union(rs[i+1][1])
-
+        for i in range(1, len(rs)):
+            if rs_merged[-1][0] == rs[i][0]:
+                union = rs_merged[-1][1].union(rs[i][1])
                 rs_merged[-1] = (
                     rs_merged[-1][0],
                     union[0]
@@ -618,10 +636,10 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
 
                 for j in range(1,len(union)):
                     rs_merged.append(
-                        (rs[i+1][0],union[j])
+                        (rs[i][0],union[j])
                     )
             else:  
-                rs_merged.append(rs[i+1])
+                rs_merged.append(rs[i])
 
         return rs_merged
 

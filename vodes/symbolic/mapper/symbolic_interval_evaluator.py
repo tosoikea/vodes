@@ -175,7 +175,6 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         bexprs = self.rec(expr.expr)
 
         for bexpr in bexprs:
-            self._logger.warning(bexpr)
             res.extend(
                 self._iabs(i=bexpr.expr, d=bexpr.bound)
             )
@@ -351,9 +350,8 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 elif isinstance(r, Variable) or self.is_constant(l):
                     rexpr = Interval(l)
 
-                if not (isinstance(lexpr, Interval) and isinstance(rexpr, Interval)):
-                    raise TypeError(
-                        f"Cannot process {lexpr}, {rexpr} as (atleast) one entity is not an interval.")
+                lexpr = lexpr if isinstance(lexpr, Interval) else Interval(lexpr)
+                rexpr = rexpr if isinstance(rexpr, Interval) else Interval(rexpr)
 
                 res.extend(op(lexpr, rexpr, bound))
 

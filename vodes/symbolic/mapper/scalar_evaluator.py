@@ -116,7 +116,7 @@ class ScalarEvaluator(ExactIntervalEvaluator):
                     upper=right
                 ),
                 boundary=boundary
-            ) for (left,right,boundary) in merge(lower,upper)
+            ) for ((left,right),boundary) in merge(lower,upper)
         ]
 
     def _idiv(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:

@@ -2,7 +2,7 @@
 
 """Tests for `vodes.error.interval` class."""
 
-from pymbolic.interop.sympy import PymbolicToSympyMapper
+from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 import pytest
 from random import randrange
 from vodes.symbolic.expressions.bounded import BoundedExpression
@@ -58,7 +58,7 @@ def __assert_equations(f,bexprs):
             if not (bexpr.bound.contains(eps)):
                 continue
             
-            actual_error = PymbolicToSympyMapper()(bexpr.expr).subs("eps", Pow(2,-p))
+            actual_error = ExactPymbolicToSympyMapper()(bexpr.expr).subs("eps", Pow(2,-p))
             print (f'Actual : {actual_error} (prec : {p})')
             break
 

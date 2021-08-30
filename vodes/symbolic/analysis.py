@@ -7,13 +7,12 @@ from vodes.symbolic.expressions.bounded import BoundedExpression, Domain
 from vodes.symbolic.expressions.infinity import Infinity, NegativeInfinity
 
 # Custom Mapper
-from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
+from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympyToPymbolicMapper
 
 # Symbolic Expression Library
 from pymbolic.primitives import Expression
 
 # Mapper
-from pymbolic.interop.sympy import SympyToPymbolicMapper
 
 class AnalysisConfig:
     @property
@@ -34,6 +33,18 @@ class AnalysisConfig:
         assert self.__limit > 0
 
 class Analysis:
+    """Class providing a set of analysis tools for a given problem expression.
+
+    Args:
+        pf: Pymbolic (symbolic) expression to use for following operations
+        config: Configuration for the operations, including e.g. the precision of approximations and the domain of the free variable.
+
+    Attributes:
+        func: The sympy expression.
+        expr: The pymbolic expression.
+        symbol: The sympy free variable, if given.
+    """
+
     def __init__(self, pf:Expression, config:AnalysisConfig=None) -> None:
         from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as Evaluator
 
@@ -81,7 +92,7 @@ class Analysis:
         return self._solve(ask,d=d)
 
     def compare(self, problem, comparison, d:Domain=None):
-        """Compare this problem with the expression y using the supplied comparison."""
+        """Compare this problem with the expression y using the supplied comparison method."""
         if isinstance(problem,Analysis):
             cmp_prob = problem
         else:
@@ -130,6 +141,7 @@ class Analysis:
         return res
 
     def __abs_maximum(self,f):
+        """Determine absolute maximum by comparing the function values at the local extrema"""
         from sympy import diff
 
         # Boundary values
@@ -153,6 +165,29 @@ class Analysis:
         
         return maximum
 
+    def __convert_to_rationale(self,f):
+        """Converts a function from a real expression to a rational expression. Underflows are prevented by approximation using the smallest representable rational."""  
+        from sympy.core.numbers import Float
+        from fractions import Fraction
+
+        def __conversion(expr):
+            res = expr
+            if isinstance(expr,Float):
+                res = Fraction(float(expr)).limit_denominator(self._config.denominator_limit)
+
+                # Approximate, number can not be exactly represented as rational
+                if abs(expr) < (1/self._config.denominator_limit) and expr != 0:
+                    t = Fraction(1,self._config.denominator_limit)
+                    res = t * (-1) if expr < 0 else t
+                    self._logger.warning(f"{expr} can not be exactly represented. Approximating as {res}")
+
+            return res
+
+        return after_walk(
+            expr=f,
+            f=lambda expr: __conversion(expr)
+        )
+
     def taylor(self, a=0, n:int=1) -> List[BoundedExpression]:
         """Approximates the given problem using a taylor expansion around the supplied a and the idea of taylor models.
         Given the problem f(x) this function returns a symbolic interval I(x) with the property \forall_x f(x) \in I(x).
@@ -168,14 +203,13 @@ class Analysis:
             taylor: Symbolic interval I(x) with taylor polynomials of degree n as boundary.
         """
         from vodes.symbolic.utils import merge
-        from sympy import series, lambdify, Pow, Float
+        from sympy import series, lambdify, Pow, sympify
         from scipy.optimize import minimize_scalar
         from mpmath import mpf
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         from math import factorial
-        from fractions import Fraction
 
-        assert n > 0
+        assert n >= 0
 
         if isinstance(a,Expression):
             a = ExactPymbolicToSympyMapper()(a)
@@ -188,7 +222,7 @@ class Analysis:
         if self.symbol is None:
             return [
                 BoundedExpression(
-                    expression=Interval(self.func),
+                    expression=Interval(self.expr),
                     boundary=self._config.dom
                 )
             ]
@@ -200,6 +234,7 @@ class Analysis:
 
         # (1) Construct the taylor polynomial 
         t_n = series(self.func,self.symbol,x0=a,n=n+1).removeO()
+        self._logger.debug(f"Obtained taylor series {t_n} of order {n}")
 
         # (2) Bound the remainder R_n(x)
         r_n = self.diff(n=n+1)
@@ -212,7 +247,7 @@ class Analysis:
             # Analytical approach
             try:
                 m = self.__abs_maximum(r_n)
-            except ValueError:
+            except (ValueError, TypeError):
                 self._logger.warning(f'Falling back to optimizers, as {r_n} could not be solved analytically.')
 
                 # we want to maximize
@@ -230,30 +265,27 @@ class Analysis:
                 if not res.success:
                     raise ValueError("Could not determine optimum.")
 
-                m = r_n_func(res.x)
+                m = sympify(r_n_func(res.x))
                 if m == mpf("inf") or m == mpf("-inf"):
                     raise ValueError("Could not reliably bound the error. Try to use the domain to restrict the functional values.")
 
-        # TODO : Under & Overflow -> Determine the error accordingly
-        m = float(m)
-        m_approx = Fraction(m).limit_denominator(self._config.denominator_limit)
-
+        # (3) Convert constant M to rational (rigorously)
         # This is allowed, as we only increase the size of our constant M while still upholding the inequality M >= |R_n(x)|
-        if abs(m) < (1/self._config.denominator_limit) and m != 0:
-            m_approx = Fraction(1,self._config.denominator_limit)
+        m_approx = abs(self.__convert_to_rationale(m))
 
         #TODO Verallgemeinern für (n+1) uneven
         c = m_approx * Pow(factorial(n+1),-1) * (self.symbol - a)**(n+1)
+        self._logger.debug(f"Converted constant {m} to boundary {c} ({m_approx})")
 
         # (3) Construct valid symbolic intervals
         exprs = [
-            SympyToPymbolicMapper()(t_n - c), 
-            SympyToPymbolicMapper()(t_n + c)
+            ExactSympyToPymbolicMapper()(t_n - c), 
+            ExactSympyToPymbolicMapper()(t_n + c)
         ]
 
         lower = self._evaluator._minimum(exprs,self._config.dom)
         upper = self._evaluator._maximum(exprs,self._config.dom)
-
+        
         return [
             BoundedExpression(
                 expression=Interval(
@@ -261,12 +293,15 @@ class Analysis:
                     upper=right
                 ),
                 boundary=boundary
-            ) for (left,right,boundary) in merge(lower,upper)
+            ) for ((left,right),boundary) in merge(lower,upper)
         ]
 
     def is_polynomial(self,n:int):
+        """Determines if the given problem statement is a polynomial and if so of degree n at maximum"""
         from sympy import Poly
         from sympy.polys.polyerrors import PolynomialError
+
+        assert n >= 0
 
         # ~ is_costant() of sympy objects
         if self.__symbol is None:
@@ -294,30 +329,10 @@ class Analysis:
             raise ValueError(f'Encountered unsolved root {d.start}')
 
         if isinstance(d.start,Basic):
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            if isinstance(d.start,SymPi):
-                d.start = Pi()
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            elif isinstance(d.start,SymNegInf):
-                d.start = NegativeInfinity()
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            elif isinstance(d.start,SymInf):
-                d.start = Infinity()
-            else:
-                d.start = SympyToPymbolicMapper()(d.start)
+            d.start = ExactSympyToPymbolicMapper()(d.start)
         
         if isinstance(d.end,Basic):
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            if isinstance(d.end,SymPi):
-                d.end = Pi()
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            elif isinstance(d.end,SymNegInf):
-                d.end = NegativeInfinity()
-            # Constant mapping, TODO : Custom SympyToPymbolicMapper
-            elif isinstance(d.end,SymInf):
-                d.end = Infinity()
-            else:
-                d.end = SympyToPymbolicMapper()(d.end)
+            d.end = ExactSympyToPymbolicMapper()(d.end)
         
     def _purge_solutions(self, ds:List[Domain], d:Domain=None) -> list:
         from sympy import im
@@ -417,3 +432,17 @@ class Analysis:
         res = self._map_solution(solution,d=d)
 
         return res
+    
+###
+# SYMPY UTILITY FUNCTIONS
+###
+def after_walk(expr,f):
+    children = []
+
+    for arg in expr.args:
+        children.append(after_walk(arg,f))
+    
+    if len(children) == 0:
+        return f(expr)
+    else:
+        return f(expr.func(*children))

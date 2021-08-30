@@ -10,9 +10,12 @@ from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 
 # Custom Expression Library
 from vodes.symbolic.expressions.bounded import Domain, BoundedExpression
+from vodes.symbolic.expressions.nthroot import NthRoot
+from vodes.symbolic.expressions.trigonometric import cos,sin
 
 # Symbolic Expression Library
 from pymbolic import var
+from pymbolic.primitives import Quotient, Power, Sum
 
 
 def __assert_inclusion(expr,bexprs):
@@ -413,3 +416,115 @@ def test_inclusion_quartic4():
     # Assert
     for bexprs in res:
         __assert_inclusion(p,bexprs)
+
+
+def __test_polynomial(ns:list):
+    """Determines if polynomial degree is correctly evaluated for a valid polynomial"""
+    # Arrange
+    x = var('x')
+
+    n = 0
+    p = 0
+    for i in range(len(ns)):
+        if ns[i]:
+            p += randrange(1,200) * x**i
+            n = i
+
+    an = Analysis(p)
+
+    # Act
+    res = [an.is_polynomial(n=i) for i in range(len(ns) + 4)]
+    print(f'Polynomial {p} with answer vector {res}')
+
+    # Assert
+    for i in range(len(res)):
+        if i >= n:
+            assert res[i]
+        else:
+            assert not res[i]
+        
+def test_is_polynomial1():
+    ns = [False,True,False,True,True]
+    __test_polynomial(ns)
+
+
+def test_is_polynomial2():
+    """Determines if polynomial degree is correctly evaluated for a valid polynomial"""
+    # Arrange
+    ns = [False,False,False,False,False]
+    __test_polynomial(ns)
+
+def test_is_polynomial3():
+    """Determines if polynomial degree is correctly evaluated for a valid polynomial"""
+    # Arrange
+    ns = [True,True,True,True,True]
+    __test_polynomial(ns)
+
+def test_is_polynomial4():
+    """Determines if polynomial degree is correctly evaluated for a valid polynomial"""
+    # Arrange
+    ns = [True,False,False,False,True]
+    __test_polynomial(ns)
+
+def test_is_polynomial5():
+    """Determines if polynomial degree is correctly evaluated for a valid polynomial"""
+    # Arrange
+    x = var('x')
+    p = x**(1/2)+x-200
+
+    an = Analysis(p)
+
+    # Act
+    res = [an.is_polynomial(n=i) for i in range(randrange(5))]
+    print(f'Non-polynomial {p} with answer vector {res}')
+
+    # Assert
+    for i in range(len(res)):
+        assert not res[i]
+
+def test_is_polynomial6():
+    """Determines if polynomial degree is correctly evaluated for an invalid polynomial"""
+    # Arrange
+    p = Power(Sum((1,600)),Quotient(1,2))
+
+    an = Analysis(p)
+
+    # Act
+    res = [an.is_polynomial(n=i) for i in range(randrange(0,15))]
+    print(f'Polynomial {p} with answer vector {res}')
+
+    # Assert
+    for i in range(len(res)):
+        assert res[i]
+
+def test_is_polynomial7():
+    """Determines if polynomial degree is correctly evaluated for an invalid polynomial"""
+    # Arrange
+    x = var('x')
+    p = NthRoot(x,3) + cos(x**2)
+
+    an = Analysis(p)
+
+    # Act
+    res = [an.is_polynomial(n=i) for i in range(randrange(5))]
+    print(f'Non-polynomial {p} with answer vector {res}')
+
+    # Assert
+    for i in range(len(res)):
+        assert not res[i]
+
+def test_is_polynomial8():
+    """Determines if polynomial degree is correctly evaluated for an invalid polynomial"""
+    # Arrange
+    x = var('x')
+    p = sin(x**2)
+
+    an = Analysis(p)
+
+    # Act
+    res = [an.is_polynomial(n=i) for i in range(randrange(5))]
+    print(f'Non-polynomial {p} with answer vector {res}')
+
+    # Assert
+    for i in range(len(res)):
+        assert not res[i]

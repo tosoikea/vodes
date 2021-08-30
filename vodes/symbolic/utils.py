@@ -94,50 +94,85 @@ def maximum(os:list):
 
     return res
 
-
 def sort_bounded(ls:list):
     """Sort a list of bounded expressions"""
     from functools import cmp_to_key
     list.sort(ls,key=cmp_to_key(lambda item1,item2: compare(item1.bound,item2.bound)))
-    
 
-def merge(ls:list,rs:list) -> List[Tuple[Expression,Expression,object]]:
+def _sort_bounded_tuple(ls:list):
+    """Sort a list of bounded expressions"""
+    from functools import cmp_to_key
+    list.sort(ls,key=cmp_to_key(lambda item1,item2: compare(item1[1],item2[1])))
+
+def merge_unary(ls:list) -> List[Tuple[Expression,object]]:
+    """Merges a single list of bounded expressions to tuples made up of the expression and the corresponding domain."""
+    return _merge_unary([(l.expr,l.bound) for l in ls])
+
+def _merge_unary(ls:list) -> List[Tuple[Expression,object]]:
+    """Merges a single list of expressions associated with boundaries to tuples made up of the expression and the corresponding domain."""
+    res = []
+
+    _sort_bounded_tuple(ls)
+
+    for (lexpr,lbound) in ls:
+        if len(res) == 0:
+            res.append(
+                (lexpr,lbound)
+            )
+        else:
+            (rexpr,rbound) = res.pop()
+            existing = rbound.intersect(lbound)
+
+            if not(existing is None):
+                # expand existing boundary
+                expansion = rbound.union(existing)
+                # reduce new boundary
+                reduction = lbound.difference(expansion)
+
+                if len(expansion) != 1:
+                    raise ValueError(f"Invalid expansion {expansion}")
+
+                res.append(
+                    (
+                        rexpr,
+                        expansion[0]
+                    )
+                )
+
+                # No more boundary left
+                if len(reduction) == 0:
+                    continue
+                elif len(reduction) == 1:
+                    lbound = reduction[0]
+                else:
+                    raise ValueError(f"Invalid combination {reduction} (from exp. {expansion})")
+            else:
+                res.append((rexpr,rbound))
+
+            res.append(
+                (
+                    lexpr,
+                    lbound
+                )
+            )
+
+    return res
+
+def merge(ls:list,rs:list) -> List[Tuple[Tuple[Expression,Expression],object]]:
     """Merges two list of bounded expressions to tuples made up of a pair of items from the lists and the shared domain."""
 
     res = []
-
-    sort_bounded(ls)
-    sort_bounded(rs)
-  
-    for l in ls:
-        for r in rs:
-            combined = l.bound.intersect(r.bound)
-
+    mls = merge_unary(ls)
+    mrs = merge_unary(rs)
+    
+    for (lexpr,lbound) in mls:
+        for (rexpr,rbound) in mrs:
+            combined = lbound.intersect(rbound)
             if combined is None:
                 continue
 
-            # Multiple domains contain the same item => Ambiguity
-            if len(res) > 0 and res[-1][2].right_open == combined.left_open and eq(combined.start,res[-1][2].end):
-                    # a) Single item domain
-                    # Current one? => Ignore, information is already present within given result
-                    if eq(combined.start,combined.end):
-                        continue
-
-                    # Existing one? => Remove it, add information with this combination
-                    elif eq(res[-1][2].start,res[-1][2].end):
-                        res.pop()
-                    
-                    # b) Multi item domains, remove ambiguity
-                    else:
-                        combined.left_open = not res[-1][2].right_open
-            
             res.append(
-                (
-                    l.expr,
-                    r.expr,
-                    combined
-                )
+                ((lexpr,rexpr),combined)
             )
-    return res
 
-
+    return _merge_unary(res)
