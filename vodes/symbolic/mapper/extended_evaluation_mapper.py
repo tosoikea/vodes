@@ -2,17 +2,24 @@ from vodes.symbolic.expressions.nthroot import NthRoot
 from pymbolic.mapper.evaluator import EvaluationMapper
 from math import pi, sin, cos
 
-def evaluate(expression, context=None):
+def evaluate(expression, context=None, float:bool=False):
     if context is None:
         context = {}
-    return ExtendedEvaluationMapper(context)(expression)
+    res = ExtendedEvaluationMapper(context)(expression)
+
+    # Two iterations of solver, if symbolic values are used for evaluation.
+    # This allows to push the floating calculations further up.
+    if float:
+        return evaluate(res, context=context)
+    else:
+        return res
 
 class ExtendedEvaluationMapper(EvaluationMapper):
     ###
     # FUNCTIONS
     ###
     def map_nthroot(self,expr):
-        return evaluate(self.rec(expr.expr)**(1/expr.n))
+        return self.rec(self.rec(expr.expr)**(1/expr.n))
 
     def map_sin(self, expr):
         return sin(

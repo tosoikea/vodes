@@ -174,7 +174,7 @@ class TaylorAnalysis(Analysis):
 
     def absolute(self, context: dict,min_precision:int,max_precision:int):
         from vodes.symbolic.mapper.extended_substitution_mapper import ExtendedSubstitutionMapper
-        from vodes.symbolic.mapper.extended_evaluation_mapper import ExtendedEvaluationMapper
+        from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         from pymbolic.mapper.substitutor import make_subst_func
 
         eps = MachineError(min_precision=min_precision,max_precision=max_precision)
@@ -189,7 +189,7 @@ class TaylorAnalysis(Analysis):
         ##
         # The approximative error term includes no machine error
         ##
-        t_t1 = ExtendedEvaluationMapper(context=context)(self.__t1)
+        t_t1 = evaluate(self.__t1,context=context,float=True)
 
         self._precision = (min_precision,max_precision)
         self._absolute = [
@@ -201,5 +201,4 @@ class TaylorAnalysis(Analysis):
         ]
 
         self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')
-
         return self._absolute

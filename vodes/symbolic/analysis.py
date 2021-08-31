@@ -301,8 +301,7 @@ class Analysis:
                     b_left = None if isinstance(self._config.dom.start, NegativeInfinity) else evaluate(self._config.dom.start)
                     b_right = None if isinstance(self._config.dom.end, Infinity) else evaluate(self._config.dom.end)
                 
-                    bounds = [(b_left,b_right) for _ in range(len(f.free_symbols))]
-                    res = minimize_scalar(minimize_func, bounds=bounds, method="bounded")
+                    res = minimize_scalar(minimize_func, bounds=(b_left,b_right), method="bounded")
 
                 if not res.success:
                     raise ValueError("Could not determine optimum.")

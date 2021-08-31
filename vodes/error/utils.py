@@ -58,18 +58,19 @@ class AnalysisSolution(Solution):
     def error(self, prec: int):
         from sympy import Float
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
+        precision = 256
 
         err = evaluate(MachineError(min_precision=prec,max_precision=prec).bound.end)
 
         for bexpr in self.bexprs:
             if not bexpr.bound.contains(err):
                 continue
-
+            
             if len(bexpr.expr.free_symbols) == 0:
-                return bexpr.expr.evalf(512)
+                return bexpr.expr.evalf(precision)
             elif len(bexpr.expr.free_symbols) == 1:
                 sym = list(bexpr.expr.free_symbols)[0]
-                return bexpr.expr.subs(sym,Float(err,512)).evalf(512)
+                return bexpr.expr.subs(sym,Float(err,precision)).evalf(precision)
             else:
                 raise ValueError("Encountered too many free variables.")
 
@@ -84,7 +85,7 @@ def show(solutions:List[Solution],min_prec:int=11,max_prec:int=53):
 
         for x in xs:
             ys.append(sol.error(prec=x))
-    
+
         pyplot.plot(xs,ys, label=sol.name)
 
     pyplot.grid(True)

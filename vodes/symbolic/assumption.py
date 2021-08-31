@@ -35,7 +35,7 @@ class Assumption:
                     continue
 
                 tres = self.__translation.translate(exprs[i])
-                
+
                 if all(map(self.__property.verify,tres)):
                     res.extend(tres)
                 else:
