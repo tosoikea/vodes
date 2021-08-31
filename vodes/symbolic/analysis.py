@@ -164,7 +164,6 @@ class Analysis:
         for i in range(1,n+1):
             for (vars,derivative) in self.diff(n=i):
                 (context,tail) = convert_vars(vars)
-                print(f'{self.func} =({i})=> {derivative}')
                 t_n += derivative.subs(context) / factorial(i) * tail
 
         self._logger.debug(f"Obtained taylor series {t_n} of order {n} from {self.func}")

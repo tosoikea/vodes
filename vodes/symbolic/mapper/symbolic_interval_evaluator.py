@@ -366,7 +366,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         from vodes.symbolic.utils import le,ge
         from vodes.symbolic.expressions.infinity import NegativeInfinity, Infinity
-        print(f'D:{d}')
+        
         if xs is None:
             return [
                 (
