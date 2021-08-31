@@ -21,11 +21,11 @@ from pymbolic.primitives import Quotient
 x = var('x')
 xv = 800
 
-# 1.) x := sqrt(1+x) - 1
-f1 = (Subtraction((x,x)))**20
+# 1.) x := (x-x)^5
+f1 = (Subtraction((x,x)))**5
 ia1 = IA(f1)
 ta1 = TA(f1)
-ex1 = lambda: sqrt(mpf(xv) + mpf(xv)) - mpf(1)
+ex1 = lambda: (mpf(xv) - mpf(xv))**5
 
 # x ~ 0
 context = {

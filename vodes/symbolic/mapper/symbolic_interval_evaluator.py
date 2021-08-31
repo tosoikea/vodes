@@ -20,6 +20,10 @@ from pymbolic.mapper import RecursiveMapper
 
 #TODO : Inward and outward rounding
 class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
+    @classmethod
+    def is_multivariant(cls) -> bool:
+        return False
+
     """Class to evaluate expressions containing symbolic intervals. These expressions have to be limited to one free variable after substitution.
 
     Args:
@@ -38,6 +42,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         self._context = context
         self._symbol = symbol
         self._assumptions = {}
+    
 
     ####
     # EXPRESSION MAPPING

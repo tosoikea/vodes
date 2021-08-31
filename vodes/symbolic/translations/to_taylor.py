@@ -43,6 +43,6 @@ class ToTaylor(Translation):
         from vodes.symbolic.analysis import Analysis, AnalysisConfig
 
         # TODO : Evaluate expansion point
-        res = Analysis(expr,config=AnalysisConfig(d=boundary,limit=self.limit)).taylor(n=self.n-1)
+        res = Analysis(expr,config=AnalysisConfig(d=boundary,limit=self.limit)).taylor_model(n=self.n-1)
         return res
 

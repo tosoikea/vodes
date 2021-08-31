@@ -19,7 +19,7 @@ from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator
 # Expression Library
 from pymbolic.primitives import Expression, Quotient, Variable, Power
 
-class TaylorIntersectionEvaluator(ComparisonEvaluator):
+class TaylorComparisonEvaluator(ComparisonEvaluator):
     """Class for determining the exact boundaries of intervals on the basis of function analysis.
     TODO : Describe in depth, firstly in thesis."""
 

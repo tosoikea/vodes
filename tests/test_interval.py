@@ -27,7 +27,7 @@ def evaluators():
 
 @pytest.fixture
 def static_evaluators():
-    from vodes.symbolic.mapper.taylor_intersection_evaluator import TaylorIntersectionEvaluator as TE
+    from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator as TE
     from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as CE
     from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
 

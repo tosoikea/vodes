@@ -56,7 +56,7 @@ def test_inclusion_const1():
     an = Analysis(x)
 
     # Act
-    bexprs = an.taylor(n=randrange(1,9))
+    bexprs = an.taylor_model(n=randrange(1,9))
 
     # Assert
     assert len(bexprs) == 1
@@ -71,7 +71,7 @@ def test_inclusion_const2():
     an = Analysis(x)
 
     # Act
-    bexprs = an.taylor(n=randrange(1,9))
+    bexprs = an.taylor_model(n=randrange(1,9))
 
     # Assert
     assert len(bexprs) == 1
@@ -92,7 +92,7 @@ def test_inclusion_linear1():
     an = Analysis(p)
 
     # Act
-    bexprs = an.taylor(n=randrange(1,9))
+    bexprs = an.taylor_model(n=randrange(1,9))
 
     # Assert
     assert len(bexprs) == 1
@@ -113,7 +113,7 @@ def test_inclusion_linear2():
     an = Analysis(p)
 
     # Act
-    bexprs = an.taylor(n=randrange(1,9))
+    bexprs = an.taylor_model(n=randrange(1,9))
 
     # Assert
     assert len(bexprs) == 1
@@ -135,9 +135,9 @@ def test_inclusion_quadratic1():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3)
     ]
 
     # Assert
@@ -158,9 +158,9 @@ def test_inclusion_quadratic2():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3)
     ]
 
     # Assert
@@ -181,9 +181,9 @@ def test_inclusion_quadratic3():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3)
     ]
 
     # Assert
@@ -205,7 +205,7 @@ def test_inclusion_cubic1():
 
     # Act & Assert
     try:
-        an.taylor(n=1)
+        an.taylor_model(n=1)
         assert False
     except:
         assert True
@@ -225,9 +225,9 @@ def test_inclusion_cubic2():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3)
     ]
 
     # Assert
@@ -249,10 +249,10 @@ def test_inclusion_cubic3():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4)
     ]
 
     # Assert
@@ -274,10 +274,10 @@ def test_inclusion_cubic4():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4)
     ]
 
     # Assert
@@ -299,10 +299,10 @@ def test_inclusion_cubic5():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4)
     ]
 
     # Assert
@@ -325,13 +325,13 @@ def test_inclusion_quartic1():
 
     # Act & Assert
     try:
-        an.taylor(n=1)
+        an.taylor_model(n=1)
         assert False
     except:
         assert True
 
     try:
-        an.taylor(n=2)
+        an.taylor_model(n=2)
         assert False
     except:
         assert True
@@ -352,11 +352,11 @@ def test_inclusion_quartic2():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4),
-        an.taylor(n=5)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4),
+        an.taylor_model(n=5)
     ]
 
     # Assert
@@ -379,11 +379,11 @@ def test_inclusion_quartic3():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4),
-        an.taylor(n=5)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4),
+        an.taylor_model(n=5)
     ]
 
     # Assert
@@ -406,11 +406,11 @@ def test_inclusion_quartic4():
 
     # Act
     res = [
-        an.taylor(n=1),
-        an.taylor(n=2),
-        an.taylor(n=3),
-        an.taylor(n=4),
-        an.taylor(n=5)
+        an.taylor_model(n=1),
+        an.taylor_model(n=2),
+        an.taylor_model(n=3),
+        an.taylor_model(n=4),
+        an.taylor_model(n=5)
     ]
 
     # Assert

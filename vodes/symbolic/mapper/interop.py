@@ -13,6 +13,10 @@ class ExactSympyToPymbolicMapper:
         )
 
     def __after_walk(self,expr,f):
+        from sympy.core.basic import Basic
+        if not isinstance(expr,Basic):
+            return expr
+
         children = []
 
         for arg in expr.args:

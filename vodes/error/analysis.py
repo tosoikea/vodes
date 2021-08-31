@@ -11,7 +11,7 @@ from vodes.symbolic.expressions.interval import Interval
 from vodes.error.mapper import AffineMapper, IntervalMapper
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympyToPymbolicMapper
-from vodes.symbolic.mapper.taylor_intersection_evaluator import TaylorIntersectionEvaluator as IE
+from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator as IE
 
 # Symbolic Expression
 from pymbolic.primitives import Expression, Power
@@ -51,14 +51,19 @@ class Analysis(ABC):
         pass
 
     def show(self):
+        """Visualize the calculated absolute error."""
         from vodes.error.utils import show, AnalysisSolution
-
-        #from numpy.core.function_base import linspace
 
         if self._absolute is None:
             raise ValueError("No absolute error calculated")
 
-        show(solutions=[AnalysisSolution(bexprs=self._absolute,name=str(self.__class__))],min_prec=self._precision[0],max_prec=self._precision[1])
+        show(
+            solutions=[
+                AnalysisSolution(bexprs=self._absolute,name=str(self.__class__))
+            ],
+            min_prec=self._precision[0],
+            max_prec=self._precision[1]
+        )
 
 
 class IntervalAnalysis(Analysis):
