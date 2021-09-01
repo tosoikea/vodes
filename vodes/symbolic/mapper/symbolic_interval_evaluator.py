@@ -78,13 +78,23 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
   
     def map_variable(self, expr:Variable) -> List[BoundedExpression]:
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
+        from pymbolic.mapper.evaluator import UnknownVariableError
 
         res = None
+
         # vexpr do not substitute the free symbol
         if not str(self._symbol.name) in self._context and self._symbol.name == expr.name:
             vexpr = Interval(expr)
         else:
-            vexpr = Interval(evaluate(expression=expr,context=self._context))
+            try:
+                subs = self._context[expr.name]
+
+                if isinstance(subs,Interval):
+                    vexpr = subs
+                else:
+                    vexpr = Interval(subs)
+            except KeyError:
+                raise UnknownVariableError(expr.name)
 
         res = [
             BoundedExpression(

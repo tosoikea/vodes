@@ -24,19 +24,53 @@ class PseudoExactSolution(Solution):
         finally:
             mp.prec = t
 
-    def __init__(self, func):
+    def __init__(self, func, name:str="Exact"):
         self.func = func
         # 113 ~ exact solution
         self.expected = self.__calculate(113)
+        self.__name = name
 
     @property
     def name(self):
         """Get the name of the solution"""
-        return "Exact"
+        return self.__name
 
     def error(self, prec:int):
+        print(f'Expected : {self.expected}')
+        print(f'Calculated : {self.__calculate(prec=prec)}')
+
         return abs(self.expected -  self.__calculate(prec))
 
+class PseudoExactIntervalSolution(Solution):
+    def __calculate(self,prec):
+        from mpmath import iv
+        t = iv.prec
+        try:
+            iv.prec = prec
+            return self.func()
+        finally:
+            iv.prec = t
+
+    def __init__(self, func, name:str="Exact"):
+        self.func = func
+        # 113 ~ exact solution
+        self.expected = self.__calculate(113)
+        self.__name = name
+
+    @property
+    def name(self):
+        """Get the name of the solution"""
+        return self.__name
+
+    def error(self, prec:int):
+        from mpmath import mpf
+
+        iv = abs(self.expected - self.__calculate(prec))
+
+        return mpf(max([
+            iv.a,
+            iv.b
+        ])._mpi_[0])
 
 class AnalysisSolution(Solution):
     def __init__(self, bexprs:List[BoundedExpression], name:str):

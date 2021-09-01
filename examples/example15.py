@@ -7,28 +7,30 @@ sys.path.append('../vodes')
 from vodes.symbolic.expressions.primitives import Subtraction
 from vodes.error.analysis import IntervalAnalysis as IA, TaylorAnalysis as TA
 
-from vodes.error.utils import PseudoExactSolution, show, AnalysisSolution
+from vodes.error.utils import PseudoExactIntervalSolution, show, AnalysisSolution
 from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
+from vodes.symbolic.expressions.interval import Interval
 
-from mpmath import mpf, sqrt
+from mpmath import iv
 from pymbolic import var
 from pymbolic.primitives import Quotient
 
 MIN_PREC = 11
-MAX_PREC = 53
+MAX_PREC = 16
 
 ##
-# Example is from thesis
+# Simple Interval Input Example
 ##
 
 x = var('x')
-xv = 800
+xv = Interval(3,4)
 
-# 1.) x := (x-x)^5
-f1 = (Subtraction((x,x)))**5
+# f := x**2 - x
+
+f1 = Subtraction((x**2,x))
 ia1 = IA(f1)
 ta1 = TA(f1)
-ex1 = lambda: (mpf(xv) - mpf(xv))**5
+ex1 = lambda: iv.mpf([3,4])**2 - iv.mpf([3,4])
 
 # x ~ 0
 context = {
@@ -37,11 +39,12 @@ context = {
 
 erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
 errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA"),
         AnalysisSolution(bexprs=errt1,name="TA"),
-        PseudoExactSolution(func=ex1),
+        PseudoExactIntervalSolution(func=ex1),
     ],
     min_prec=MIN_PREC,
     max_prec=MAX_PREC

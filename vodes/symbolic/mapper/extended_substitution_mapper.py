@@ -1,4 +1,10 @@
-from pymbolic.mapper.substitutor import SubstitutionMapper
+from pymbolic.mapper.substitutor import SubstitutionMapper, make_subst_func
+
+def substitute(expression, variable_assignments=None):
+    if variable_assignments is None:
+        variable_assignments = {}
+
+    return ExtendedSubstitutionMapper(make_subst_func(variable_assignments))(expression)
 
 class ExtendedSubstitutionMapper(SubstitutionMapper):
     ## FUNCTIONS

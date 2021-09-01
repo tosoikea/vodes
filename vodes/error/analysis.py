@@ -34,13 +34,15 @@ class Analysis(ABC):
         self._precision = None
 
     @abstractmethod
-    def absolute(self, context:dict, min_precision:int, max_precision:int) -> list:
+    def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         """Calculate the absolute error for the earlier supplied problem.
 
         Args:
             context (dict): Defines the substitution of symbolic variables within the problem for the evaluation. Importantly, all free variables contained within the initial problem HAVE to be substituted. Otherwise, the execution terminates.
             min_precision (int): Defines the minimum precision that should be used for the analysis. 
             max_precision (int): Defines the maximum precision that should be used for the analysis.
+            min_exponent (int): Minimum bits used for the exponent.
+            max_exponent (int): Maximum bits used for the exponent.
             
         Raises:
             UnknownVariableError
@@ -82,7 +84,7 @@ class IntervalAnalysis(Analysis):
 
         self._logger.info(f'Machine Expression : {self.__expr}')
 
-    def absolute(self, context: dict,min_precision:int,max_precision:int):
+    def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         if min_precision <= 0 or max_precision < min_precision:
             raise ValueError(f"The supplied precision values {min_precision} and {max_precision} are invalid")
 
@@ -107,16 +109,18 @@ class TaylorAnalysis(Analysis):
     
     Args:
         problem (Expression): The problem, that is to be analyzed for its roundoff errors.
+        symbolic (bool): Determines if the remainder of the taylor expressions should be calculated using epsilon as a free variable.
 
     Attributes:
         _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
         __expr (Expression): The problem with appropriate error terms injected.
     """
-    def __init__(self, problem: Expression):
+    def __init__(self, problem: Expression, symbolic:bool = False):
         super().__init__(problem)
 
         # Mapper exposes all created noise variables
         self.__mapper = AffineMapper()
+        self.__symbolic = symbolic
 
         self.__create_error_term()
 
@@ -172,32 +176,34 @@ class TaylorAnalysis(Analysis):
         )
         self._logger.info(f'R1 : {self.__r1}')
 
-    def absolute(self, context: dict,min_precision:int,max_precision:int):
-        from vodes.symbolic.mapper.extended_substitution_mapper import ExtendedSubstitutionMapper
-        from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
-        from pymbolic.mapper.substitutor import make_subst_func
+    def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
+        from vodes.symbolic.utils import merge
 
         eps = MachineError(min_precision=min_precision,max_precision=max_precision)
 
         subs = {}
         for key in self.__mapper.exact:
-            subs[key] = Interval(-eps, eps)
+            subs[key] = Interval(-eps, eps) if self.__symbolic else Interval(- eps.bound.end, eps.bound.end)
 
-        subs_mapper = ExtendedSubstitutionMapper(subst_func=make_subst_func(subs))
-        eps_r1 = subs_mapper(self.__r1)
+        # (1) Remainder, may or may not be symbolic
+        eps_r1 = IE(context=context,symbol=eps)(
+            Abs(substitute(self.__r1,subs))
+        )
 
-        ##
-        # The approximative error term includes no machine error
-        ##
-        t_t1 = evaluate(self.__t1,context=context,float=True)
+        # (2) Linear Expression, does not contain symbolic expressions
+        eps_t1 = IE(context=context,symbol=eps)(
+            Abs(self.__t1)
+        )     
 
+        # (3) Final Expression
         self._precision = (min_precision,max_precision)
-        self._absolute = [
+        self._absolute  = [
             BoundedExpression(
-                # Degenerate intervals
-                expression=eps * abs(t_t1) + Power(eps,2) * expr.expr,
-                boundary=expr.bound
-            ) for expr in IE(context=context,symbol=eps)(Abs(eps_r1))
+                # e * Abs(T1) + e^2 * Abs(R1)
+                expression=eps * t1 + Power(eps,2) * r1,
+                boundary=boundary
+            ) for ((t1,r1),boundary) in merge(eps_t1,eps_r1)
         ]
 
         self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')

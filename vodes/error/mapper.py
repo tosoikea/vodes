@@ -24,7 +24,7 @@ class ErrorMapper(RecursiveMapper):
 
 class IntervalMapper(ErrorMapper):
     def map_variable(self, expr):
-        return Interval(expr - expr * MachineError(), expr + expr * MachineError())
+        return expr * Interval(1 - MachineError(), 1 + MachineError())
 
     def map_sum(self, expr):
         assert len(expr.children) == 2

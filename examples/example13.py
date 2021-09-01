@@ -14,10 +14,12 @@ from mpmath import mpf, sqrt
 from pymbolic import var
 from pymbolic.primitives import Quotient
 
+MIN_PREC = 11
+MAX_PREC = 53
+
 ##
 # Example is from https://www.math.utk.edu/~ccollins/M577/Handouts/cond_stab.pdf
 ##
-
 
 x = var('x')
 sym_xv = Quotient(1,10*6)
@@ -40,22 +42,20 @@ context = {
     'x' : sym_xv
 }
 
-erri1 = ia1.absolute(context=context, min_precision=11, max_precision=53)
-errt1 = ta1.absolute(context=context, min_precision=11, max_precision=53)
-show(
-    solutions=[
-        AnalysisSolution(bexprs=erri1,name="IA"),
-        AnalysisSolution(bexprs=errt1,name="TA"),
-        PseudoExactSolution(func=ex1),
-    ]
-)
+erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+erri2 = ia2.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+errt2 = ta2.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
 
-erri2 = ia2.absolute(context=context, min_precision=11, max_precision=53)
-errt2 = ta2.absolute(context=context, min_precision=11, max_precision=53)
 show(
     solutions=[
-        AnalysisSolution(bexprs=erri2,name="IA"),
-        AnalysisSolution(bexprs=errt2,name="TA"),
-        PseudoExactSolution(func=ex2),
-    ]
+        AnalysisSolution(bexprs=erri1,name="IA (SUB)"),
+        AnalysisSolution(bexprs=errt1,name="TA (SUB)"),
+        PseudoExactSolution(func=ex1,name="Exact (SUB)"),
+        AnalysisSolution(bexprs=erri2,name="IA (DIV)"),
+        AnalysisSolution(bexprs=errt2,name="TA (DIV)"),
+        PseudoExactSolution(func=ex2,name="Exact (DIV)")
+    ],
+    min_prec=MIN_PREC,
+    max_prec=MAX_PREC
 )
