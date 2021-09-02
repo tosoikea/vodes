@@ -134,7 +134,7 @@ class Analysis:
 
         return res
 
-    def taylor(self, a=0, n:int=1) -> Basic:
+    def taylor(self, a=0, n:int=1,no_tail:bool=False) -> Basic:
         """Taylor expansion of order n around point a"""
         from math import factorial
         assert n >= 1
@@ -144,12 +144,12 @@ class Analysis:
             tail = 1
             for v in vars:
                 context[v] = a
-                tail *= (v-a)
+                tail *= (v-a) if (not no_tail) else 1
             return (context,tail)
 
         # Constant Expression -> Exactly representable by order 1 or even 0 taylor polynomial
         if self.__type == "constant":
-            return self.expr
+            return ExactSympyToPymbolicMapper()(self.func)
 
         if isinstance(a,Expression):
             a = ExactPymbolicToSympyMapper()(a) 
@@ -159,11 +159,13 @@ class Analysis:
             raise ValueError(f"The combination of exponent {n} with expansion point {a} is not yet supported.")
 
         # Constant
-        t_n = self.func.subs(convert_vars(self.symbols())[0])
+        (context,_) = convert_vars(self.symbols())
+        t_n = self.func.subs(context)
+
         # Derivatives
         for i in range(1,n+1):
             for (vars,derivative) in self.diff(n=i):
-                (context,tail) = convert_vars(vars)
+                (_,tail) = convert_vars(vars)
                 t_n += derivative.subs(context) / factorial(i) * tail
 
         self._logger.debug(f"Obtained taylor series {t_n} of order {n} from {self.func}")

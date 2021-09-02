@@ -13,6 +13,8 @@ from sympy import Pow
 
 LOWEST_PRECISION = 11
 HIGHEST_PRECISION = 53
+MIN_EXP = 8
+MAX_EXP = 8
 
 # assume ~ 113 prec is exact (quadruple)
 EXACT_PRECISION = 113
@@ -91,7 +93,9 @@ def test_inequality1(analyses):
                 "c" : cv
             },
             max_precision = HIGHEST_PRECISION,
-            min_precision = LOWEST_PRECISION
+            min_precision = LOWEST_PRECISION,
+            min_exponent = MIN_EXP,
+            max_exponent = MAX_EXP
         )
 
         # Assert
@@ -116,7 +120,9 @@ def _inequality2(analyses, xv:int, c:int):
                 "x" : xv
             },
             max_precision = HIGHEST_PRECISION,
-            min_precision = LOWEST_PRECISION
+            min_precision = LOWEST_PRECISION,
+            min_exponent = MIN_EXP,
+            max_exponent = MAX_EXP
         )
 
         # Assert
@@ -168,38 +174,9 @@ def test_inequality3(analyses):
                 "x" : sym_xv
             },
             max_precision = HIGHEST_PRECISION,
-            min_precision = LOWEST_PRECISION
-        )
-
-        # Assert
-        __assert_equations(
-            f = f,
-            bexprs=bexprs
-        )
-
-def test_inequality4(analyses):
-    from vodes.symbolic.expressions.nthroot import NthRoot
-    from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
-    from pymbolic.primitives import Quotient
-    from mpmath import sqrt
-
-    # Arrange
-    x = var('x')
-    sym_xv = Quotient(1,10*6)
-    xv = evaluate(sym_xv)
-
-    p = x / (NthRoot(1+x,2) + 1)
-
-    f = lambda: mpf(xv) / (sqrt(mpf(xv) + mpf(1)) + mpf(1))
-
-    for analysis in analyses:
-        # Act
-        bexprs = analysis(p).absolute(
-            context={
-                "x" : sym_xv
-            },
-            max_precision = HIGHEST_PRECISION,
-            min_precision = LOWEST_PRECISION
+            min_precision = LOWEST_PRECISION,
+            min_exponent = MIN_EXP,
+            max_exponent = MAX_EXP
         )
 
         # Assert

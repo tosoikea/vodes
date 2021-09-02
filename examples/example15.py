@@ -18,6 +18,9 @@ from pymbolic.primitives import Quotient
 MIN_PREC = 11
 MAX_PREC = 16
 
+MIN_EXP = 8
+MAX_EXP = 8
+
 ##
 # Simple Interval Input Example
 ##
@@ -29,7 +32,6 @@ xv = Interval(3,4)
 
 f1 = Subtraction((x**2,x))
 ia1 = IA(f1)
-ta1 = TA(f1)
 ex1 = lambda: iv.mpf([3,4])**2 - iv.mpf([3,4])
 
 # x ~ 0
@@ -37,13 +39,11 @@ context = {
     'x' : xv
 }
 
-erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
-errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
 
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA"),
-        AnalysisSolution(bexprs=errt1,name="TA"),
         PseudoExactIntervalSolution(func=ex1),
     ],
     min_prec=MIN_PREC,

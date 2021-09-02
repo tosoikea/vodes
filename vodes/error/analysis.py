@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 # Custom Expressions
 from vodes.symbolic.expressions.absolute import Abs
-from vodes.symbolic.expressions.bounded import  BoundedExpression, MachineError
+from vodes.symbolic.expressions.bounded import  BoundedExpression, MachineError, SmallestMachineNumber
 from vodes.symbolic.expressions.interval import Interval
 
 # Custom Mapper
@@ -67,7 +67,6 @@ class Analysis(ABC):
             max_prec=self._precision[1]
         )
 
-
 class IntervalAnalysis(Analysis):
     """Class implementing roundoff error analysis on the basis of interval analysis.
 
@@ -78,17 +77,26 @@ class IntervalAnalysis(Analysis):
         _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
         __expr (Expression): The problem with appropriate error terms injected.
     """
-    def __init__(self, problem: Expression):
+    def __init__(self, problem: Expression,symbolic:bool=True):
+        from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator
         super().__init__(problem)
-        self.__expr = IntervalMapper()(self._problem)
 
-        self._logger.info(f'Machine Expression : {self.__expr}')
+        # Mapper exposes all created noise variables
+        self._mapper = IntervalMapper
+        self._evaluator = IE if symbolic else ScalarEvaluator
 
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
-        if min_precision <= 0 or max_precision < min_precision:
-            raise ValueError(f"The supplied precision values {min_precision} and {max_precision} are invalid")
+        # (1) Create Floating Point Error Model
+        self.__mapper_instance = self._mapper(
+            context=context,
+            min_precision=min_precision,
+            max_precision=max_precision,
+            min_exponent=min_exponent,
+            max_exponent=max_exponent
+        )
+        _expr = self.__mapper_instance(self._problem)
 
-        err = Abs(self._problem - self.__expr)
+        err = Abs(self._problem - _expr)
         self._logger.info(f'Error : {err}')
 
         self._precision = (min_precision,max_precision)
@@ -119,21 +127,30 @@ class TaylorAnalysis(Analysis):
         super().__init__(problem)
 
         # Mapper exposes all created noise variables
-        self.__mapper = AffineMapper()
-        self.__symbolic = symbolic
+        self._mapper = AffineMapper
+        self._symbolic = symbolic
 
-        self.__create_error_term()
-
-
-    def __create_error_term(self):
+    def _create_error_terms(self,context,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
         from sympy import diff
         from functools import reduce
+        from vodes.symbolic.analysis import Analysis as FuncAnalysis
+        from vodes.symbolic.mapper.interop import ExactSympyToPymbolicMapper as STP
 
-        self.__expr = self.__mapper(self._problem)
-        sym_expr = ExactPymbolicToSympyMapper()(self.__expr)
+        # (1) Create Floating Point Error Model
+        self.__mapper_instance = self._mapper(
+            context=context,
+            min_precision=min_precision,
+            max_precision=max_precision,
+            min_exponent=min_exponent,
+            max_exponent=max_exponent
+        )
+        _expr = self.__mapper_instance(self._problem)
+        _analysis = FuncAnalysis(_expr)
 
-        self._logger.info(f'Affine Expression : {sym_expr}')
-        self._logger.debug(f'Mappings : {self.__mapper.ids}')
+        self._logger.info(f'Floating Point Model : {_expr}')
+
+        # (2) Create Taylor expansions
+        # We do not multiply with (x-a), as it is approximated later on
 
         ##
         # Absolute Error := | o(f(x)) - f(x) |
@@ -146,15 +163,7 @@ class TaylorAnalysis(Analysis):
         # f(x,0) = f(x)
         #                 = | T_1(f,x,0) + R_1(f,x,p) |
         ##
-
-        # We do not multiply with noise (* noise), as we approximate it later, by MachineError
-        self.__t1 = ExactSympyToPymbolicMapper()(
-            reduce(lambda x,y: x + y, [
-                    diff(sym_expr, noise.name).subs(self.__mapper.exact) for noise in self.__mapper.noises
-                ]
-            )
-        )
-        self._logger.info(f'T1 : {self.__t1}')
+        _t1 = _analysis.taylor(n=1,no_tail=True)
 
         ##
         # Taylor’s Inequality :
@@ -166,45 +175,57 @@ class TaylorAnalysis(Analysis):
         # https://mathinsight.org/taylors_theorem_multivariable_introduction
         #
         ##
+        _r1 = _analysis.remainder(n=1)
 
-        # We do not multiply with noises (* e_i * e_j), as we approximate it later, by MachineError
-        self.__r1 = ExactSympyToPymbolicMapper()(
-            reduce(lambda x,y: x + y, [
-                    diff(sym_expr,e_i.name,e_j.name) for e_i in self.__mapper.noises for e_j in self.__mapper.noises
-                ]
-            )
-        )
-        self._logger.info(f'R1 : {self.__r1}')
+        return (STP()(_t1),STP()(_r1))
 
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         from vodes.symbolic.mapper.extended_substitution_mapper import substitute
         from vodes.symbolic.utils import merge
 
+        # (1) Taylor Expansion Terms
+        (_t1,_r1) = self._create_error_terms(context=context,min_precision=min_precision,max_precision=max_precision,min_exponent=min_exponent,max_exponent=max_exponent)
+
+        print(f'T1 : {_t1}')
+        print(f'R1 : {_r1}')
+
+        # (2) Substitutions for Remainder evaluation
+
+        # (A) Maximum Relative Error
         eps = MachineError(min_precision=min_precision,max_precision=max_precision)
 
-        subs = {}
-        for key in self.__mapper.exact:
-            subs[key] = Interval(-eps, eps) if self.__symbolic else Interval(- eps.bound.end, eps.bound.end)
+        # (B) Maximum Absolute Error for subnormal calculations
+        sigma = SmallestMachineNumber(min_exponent=min_exponent,max_exponent=max_exponent)
+
+        subs = {
+            "sigma": Interval(sigma.bound.start,sigma.bound.end)
+        }
+
+        for key in self.__mapper_instance.exact:
+            subs[key] = Interval(-eps, eps) if self._symbolic else Interval(-eps.bound.end, eps.bound.end)
 
         # (1) Remainder, may or may not be symbolic
+        # TODO : Also expose exponent, we use it as a constant (after substitution)
         eps_r1 = IE(context=context,symbol=eps)(
-            Abs(substitute(self.__r1,subs))
+            Abs(substitute(_r1,subs))
         )
 
         # (2) Linear Expression, does not contain symbolic expressions
         eps_t1 = IE(context=context,symbol=eps)(
-            Abs(self.__t1)
-        )     
+            Abs(_t1)
+        )  
 
         # (3) Final Expression
         self._precision = (min_precision,max_precision)
+
         self._absolute  = [
             BoundedExpression(
-                # e * Abs(T1) + e^2 * Abs(R1)
-                expression=eps * t1 + Power(eps,2) * r1,
+                # TODO : Sigma as free variable
+                expression=eps * et1 + eps**2 * er1,
                 boundary=boundary
-            ) for ((t1,r1),boundary) in merge(eps_t1,eps_r1)
+            ) for ((et1,er1),boundary) in merge(eps_t1,eps_r1)
         ]
+        self.__mapper_instance = None
 
         self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')
         return self._absolute

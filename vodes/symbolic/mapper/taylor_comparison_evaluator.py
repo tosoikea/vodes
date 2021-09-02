@@ -29,14 +29,14 @@ class TaylorComparisonEvaluator(ComparisonEvaluator):
         self._assumptions["_minimum"] = [
                 Assumption(
                     property=IsPolynomial(n=2),
-                    translation=ToTaylor(n=2,limit=2**8)
+                    translation=ToTaylor(n=2,limit=2**5)
                 )
             ]
 
         self._assumptions["_maximum"] = [
                 Assumption(
                     property=IsPolynomial(n=2),
-                    translation=ToTaylor(n=2,limit=2**8)
+                    translation=ToTaylor(n=2,limit=2**5)
                 )
             ]
     

@@ -36,9 +36,6 @@ class PseudoExactSolution(Solution):
         return self.__name
 
     def error(self, prec:int):
-        print(f'Expected : {self.expected}')
-        print(f'Calculated : {self.__calculate(prec=prec)}')
-
         return abs(self.expected -  self.__calculate(prec))
 
 class PseudoExactIntervalSolution(Solution):

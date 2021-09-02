@@ -17,12 +17,16 @@ from pymbolic.primitives import Quotient
 MIN_PREC = 11
 MAX_PREC = 53
 
+MIN_EXP = 8
+MAX_EXP = 8
+
 ##
 # Example is from thesis
 ##
 
 x = var('x')
-xv = 800
+sym_xv = Quotient(1,2)
+xv = evaluate(sym_xv)
 
 # 1.) x := (x-x)^5
 f1 = (Subtraction((x,x)))**5
@@ -32,11 +36,11 @@ ex1 = lambda: (mpf(xv) - mpf(xv))**5
 
 # x ~ 0
 context = {
-    'x' : xv
+    'x' : sym_xv
 }
 
-erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
-errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC)
+erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC,min_exponent=MIN_EXP,max_exponent=MAX_EXP)
+errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC,min_exponent=MIN_EXP,max_exponent=MAX_EXP)
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA"),

@@ -1,8 +1,9 @@
 import logging
+from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.primitives import Subtraction
 
 from pymbolic.mapper import RecursiveMapper
-from pymbolic.primitives import Sum, Product
+from pymbolic.primitives import Sum, Product, Quotient, Power
 
 
 class BinaryMapper(RecursiveMapper):
@@ -25,17 +26,19 @@ class BinaryMapper(RecursiveMapper):
         self._logger = logging.getLogger(__name__)
     
     def __split(self,f, expr):   
-        if len(expr.children) <= 2:
-            return expr
-            
+        binary_children = [self.rec(child) for child in expr.children]
+
+        if len(binary_children) <= 2:
+            return f(*binary_children)
+
         children = [
-            expr.children[0],
-            expr.children[1]
+            binary_children[0],
+            binary_children[1]
         ]
 
-        for i in range (2, len(expr.children)):
+        for i in range (2, len(binary_children)):
             children[0] = f(children[0],children[1])
-            children[1] = expr.children[i]
+            children[1] = binary_children[i]
 
         return f(*children)
 
@@ -60,11 +63,24 @@ class BinaryMapper(RecursiveMapper):
 
     # always binary (numerator, denominator)
     def map_quotient(self, expr):
-        return expr
+        return Quotient(
+            self.rec(expr.num),
+            self.rec(expr.den)
+        )
 
     # always binary (base, exponent)
     def map_power(self, expr):
-        return expr
+        return Power(
+            self.rec(expr.base),
+            self.rec(expr.exponent)
+        )
+
+    ## always binary (expr,n)
+    def map_nthroot(self, expr):
+        return NthRoot(
+            self.rec(expr.expr),
+            expr.n
+        )
         
     # always unary
     def map_constant(self, expr):
@@ -76,8 +92,8 @@ class BinaryMapper(RecursiveMapper):
         
     # always unary
     def map_sin(self, expr):
-        return expr
+        raise NotImplementedError()
 
     # always unary
     def map_cos(self, expr):
-        return expr
+        raise NotImplementedError()

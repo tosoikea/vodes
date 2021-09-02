@@ -263,6 +263,27 @@ class MachineError(BoundedVariable):
             )
         )
 
+class SmallestMachineNumber(BoundedVariable):
+    def __init__(self,min_exponent:int=1,max_exponent:int=None):
+        assert (min_exponent > 0)
+        # IEEE Standard
+        # e_min = - (2^(p-1) - 1)
+        # e.g. p : 8 bits => e_min =  - (2^7-1) = -127
+        max_num = Power(base=2, exponent=-(2**(min_exponent)-1))
+        min_num = max_num
+
+        if not max_exponent is None:
+            assert (max_exponent >= min_exponent)
+            min_num = Power(base=2, exponent=-(2**(max_exponent)-1))
+
+        super().__init__(
+            name="sigma",
+            boundary=Domain(
+                start=min_num,
+                end=max_num
+            )
+        )
+
 class DummyVariable(BoundedVariable):
     def __init__(self):
         super().__init__(
