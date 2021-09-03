@@ -2,6 +2,7 @@
 
 from functools import reduce
 from typing import List
+from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.primitives import Subtraction
 
 # Custom Expression Library
@@ -32,6 +33,9 @@ class BoundedMapper(RecursiveMapper):
         if not (r is None) and isinstance(r, BoundedExpression):
             bound = bound.intersect(r.bound)
             rexpr = r.expr
+
+        if bound is None:
+            return None
 
         # unary
         if r is None:
@@ -64,6 +68,9 @@ class BoundedMapper(RecursiveMapper):
 
     def _bpow(self, l, r, b):
         return self._bop(b,lambda a,b:Power(a,b),l,r=r)
+
+    def _broot(self, l, r, b):
+        return self._bop(b,lambda a,b:NthRoot(a,b),l,r=r)
 
     def _bsin(self, x, b):
         return self._bop(b,lambda a:sin(a),x)
@@ -113,6 +120,10 @@ class BoundedMapper(RecursiveMapper):
 
     def map_quotient(self, expr:Quotient):
         return self.__apply(self._bdiv, self.rec(expr.numerator), self.rec(expr.denominator))
+
+    ## FUNCTIONS
+    def map_nthroot(self, expr):
+        return self.__apply(self._broot, self.rec(expr.expr), self.rec(expr.n))
 
     def map_sin(self, expr):
         return self.__apply(self._bsin, self.rec(expr.expr))

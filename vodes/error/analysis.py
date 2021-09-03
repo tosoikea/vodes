@@ -8,7 +8,7 @@ from vodes.symbolic.expressions.bounded import  BoundedExpression, MachineError,
 from vodes.symbolic.expressions.interval import Interval
 
 # Custom Mapper
-from vodes.error.mapper import AffineMapper, IntervalMapper
+from vodes.error.mapper import IntervalMapper
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympyToPymbolicMapper
 from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator as IE
@@ -27,11 +27,18 @@ class Analysis(ABC):
     Attributes:
         _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
     """
-    def __init__(self, problem:Expression):
+    def __init__(self, problem:Expression,opt:dict):
+        self._opt = {} if opt is None else opt
         self._logger = logging.getLogger(__name__)
         self._problem = BM()(problem)
         self._absolute = None
         self._precision = None
+
+        self.parse(self._opt)
+
+    @abstractmethod
+    def parse(self, opt:dict):
+        pass
 
     @abstractmethod
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
@@ -77,17 +84,19 @@ class IntervalAnalysis(Analysis):
         _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
         __expr (Expression): The problem with appropriate error terms injected.
     """
-    def __init__(self, problem: Expression,symbolic:bool=True):
-        from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator
-        super().__init__(problem)
+    def __init__(self, problem: Expression, opt:dict=None):
+        super().__init__(problem, opt)
 
         # Mapper exposes all created noise variables
         self._mapper = IntervalMapper
-        self._evaluator = IE if symbolic else ScalarEvaluator
+
+    def parse(self, opt:dict):
+        # No optional parameters
+        return
 
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         # (1) Create Floating Point Error Model
-        self.__mapper_instance = self._mapper(
+        self.__mapper_instance = IntervalMapper(
             context=context,
             min_precision=min_precision,
             max_precision=max_precision,
@@ -97,7 +106,6 @@ class IntervalAnalysis(Analysis):
         _expr = self.__mapper_instance(self._problem)
 
         err = Abs(self._problem - _expr)
-        self._logger.info(f'Error : {err}')
 
         self._precision = (min_precision,max_precision)
         self._absolute = IE(
@@ -123,109 +131,34 @@ class TaylorAnalysis(Analysis):
         _problem (Expression): The supplied problem stored in binary format. Every Node therefore has a maximum of two children.
         __expr (Expression): The problem with appropriate error terms injected.
     """
-    def __init__(self, problem: Expression, symbolic:bool = False):
-        super().__init__(problem)
+    def __init__(self, problem: Expression, opt: dict=None):
+        super().__init__(problem, opt)
 
-        # Mapper exposes all created noise variables
-        self._mapper = AffineMapper
-        self._symbolic = symbolic
+    def parse(self, opt:dict):
+        self.n = opt.setdefault("n", 1)
+        self._logger.info(f"Requested taylor order is {self.n}")
 
-    def _create_error_terms(self,context,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
-        from sympy import diff
-        from functools import reduce
-        from vodes.symbolic.analysis import Analysis as FuncAnalysis
-        from vodes.symbolic.mapper.interop import ExactSympyToPymbolicMapper as STP
+    def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
+        from vodes.symbolic.mapper.comparison_evaluator import evaluate
+        from vodes.error.mapper import TaylorMapper, expand_taylor_terms
+        import copy
 
-        # (1) Create Floating Point Error Model
-        self.__mapper_instance = self._mapper(
-            context=context,
+        self.__mapper_instance = TaylorMapper(
+            n=self.n,
+            context=copy.deepcopy(context),
             min_precision=min_precision,
             max_precision=max_precision,
             min_exponent=min_exponent,
             max_exponent=max_exponent
         )
-        _expr = self.__mapper_instance(self._problem)
-        _analysis = FuncAnalysis(_expr)
+        
+        (_, error, _) = expand_taylor_terms(self.__mapper_instance(self._problem),min_prec=min_precision,max_prec=max_precision,abs=True)
 
-        self._logger.info(f'Floating Point Model : {_expr}')
+        self._absolute = evaluate(Abs(substitute(
+            error,
+            context
+        )),min_precision,max_precision)
 
-        # (2) Create Taylor expansions
-        # We do not multiply with (x-a), as it is approximated later on
-
-        ##
-        # Absolute Error := | o(f(x)) - f(x) |
-        # Affine form with noise variables to model rounded operations
-        #                <= | f(x,e) - f(x) |
-        # Taylor relative to e at e = (0,...,0)
-        # T_1 : first order term
-        # R_1 : first order error term
-        #                <= | f(x,0) + T_1(f,x,0) + R_1(f,x,p) - f(x) |
-        # f(x,0) = f(x)
-        #                 = | T_1(f,x,0) + R_1(f,x,p) |
-        ##
-        _t1 = _analysis.taylor(n=1,no_tail=True)
-
-        ##
-        # Taylor’s Inequality :
-        # M >= | f^(n+1)(x) | for all x \in (- \eps, + \eps) => | R_n(x) | <= M / (n+1)! * | x - a |^(n+1)
-        #
-        # R_1(x) = (x - a)^T / 2 * Hf(a)(x - a)
-        #
-        # d^2 f / de^2  = \sum_{i=0,j=0} (\partial^2 f) / (\partial e_i \partial e_j) (x,e)
-        # https://mathinsight.org/taylors_theorem_multivariable_introduction
-        #
-        ##
-        _r1 = _analysis.remainder(n=1)
-
-        return (STP()(_t1),STP()(_r1))
-
-    def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
-        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
-        from vodes.symbolic.utils import merge
-
-        # (1) Taylor Expansion Terms
-        (_t1,_r1) = self._create_error_terms(context=context,min_precision=min_precision,max_precision=max_precision,min_exponent=min_exponent,max_exponent=max_exponent)
-
-        print(f'T1 : {_t1}')
-        print(f'R1 : {_r1}')
-
-        # (2) Substitutions for Remainder evaluation
-
-        # (A) Maximum Relative Error
-        eps = MachineError(min_precision=min_precision,max_precision=max_precision)
-
-        # (B) Maximum Absolute Error for subnormal calculations
-        sigma = SmallestMachineNumber(min_exponent=min_exponent,max_exponent=max_exponent)
-
-        subs = {
-            "sigma": Interval(sigma.bound.start,sigma.bound.end)
-        }
-
-        for key in self.__mapper_instance.exact:
-            subs[key] = Interval(-eps, eps) if self._symbolic else Interval(-eps.bound.end, eps.bound.end)
-
-        # (1) Remainder, may or may not be symbolic
-        # TODO : Also expose exponent, we use it as a constant (after substitution)
-        eps_r1 = IE(context=context,symbol=eps)(
-            Abs(substitute(_r1,subs))
-        )
-
-        # (2) Linear Expression, does not contain symbolic expressions
-        eps_t1 = IE(context=context,symbol=eps)(
-            Abs(_t1)
-        )  
-
-        # (3) Final Expression
-        self._precision = (min_precision,max_precision)
-
-        self._absolute  = [
-            BoundedExpression(
-                # TODO : Sigma as free variable
-                expression=eps * et1 + eps**2 * er1,
-                boundary=boundary
-            ) for ((et1,er1),boundary) in merge(eps_t1,eps_r1)
-        ]
-        self.__mapper_instance = None
-
-        self._logger.info(f'Evaluated Error : {list(map(str,self._absolute))}')
+        self._logger.info(f"Determined absolute error {list(map(str,self._absolute))}")
         return self._absolute

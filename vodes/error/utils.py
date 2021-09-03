@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+from logging import error
 from typing import List
+from vodes.ode.solver import Solver
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 from vodes.symbolic.expressions.bounded import BoundedExpression, MachineError
 
@@ -28,6 +30,30 @@ class PseudoExactSolution(Solution):
         self.func = func
         # 113 ~ exact solution
         self.expected = self.__calculate(113)
+        self.__name = name
+
+    @property
+    def name(self):
+        """Get the name of the solution"""
+        return self.__name
+
+    def error(self, prec:int):
+        return abs(self.expected -  self.__calculate(prec))
+
+class PseudoExactODESolution(Solution):
+    def __calculate(self,prec):
+        self.solver.calculate(precision=prec)
+        return self.solver.solutions[-1][1]
+
+    def __exact(self):
+        self.solver.calculate()
+        return self.solver.solutions[-1][1]
+
+    def __init__(self, solver:Solver, name:str="Exact"):
+        from sympy import Float
+        self.solver = solver
+        # symbolic evaluation, Float(512, evaluation)
+        self.expected = Float(self.__exact(),512)
         self.__name = name
 
     @property

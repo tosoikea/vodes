@@ -15,6 +15,21 @@ def evaluate(expression, context=None, float:bool=False):
         return res
 
 class ExtendedEvaluationMapper(EvaluationMapper):
+    def map_sub(self,expr):
+        from functools import reduce
+
+        return reduce(
+            lambda r,x: r - x,
+            [ self.rec(child) for child in expr.children ] 
+        )
+
+    def map_interval(self,expr):
+        from vodes.symbolic.expressions.interval import Interval
+        
+        return Interval(
+            self.rec(expr.low),
+            self.rec(expr.up)
+        )
     ###
     # FUNCTIONS
     ###
@@ -30,6 +45,7 @@ class ExtendedEvaluationMapper(EvaluationMapper):
         return cos(
             self.rec(expr.expr)
         )
+        
     ###
     # CONSTANTS
     ###

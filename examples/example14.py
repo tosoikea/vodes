@@ -31,7 +31,7 @@ xv = evaluate(sym_xv)
 # 1.) x := (x-x)^5
 f1 = (Subtraction((x,x)))**5
 ia1 = IA(f1)
-ta1 = TA(f1)
+ta1 = TA(f1,{"n":1})
 ex1 = lambda: (mpf(xv) - mpf(xv))**5
 
 # x ~ 0
@@ -41,6 +41,7 @@ context = {
 
 erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC,min_exponent=MIN_EXP,max_exponent=MAX_EXP)
 errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC,min_exponent=MIN_EXP,max_exponent=MAX_EXP)
+
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA"),

@@ -19,7 +19,6 @@ MAX_EXP = 8
 # assume ~ 113 prec is exact (quadruple)
 EXACT_PRECISION = 113
 
-
 def calculate(f,prec):
     t = mp.prec
     try:
@@ -35,7 +34,7 @@ def analyses():
     from vodes.error.analysis import TaylorAnalysis as TA
     return [
         lambda p : IA(problem=p),
-        #lambda p : TA(problem=p)
+        lambda p : TA(problem=p)
     ]
 
 def __assert_equations(f,bexprs):

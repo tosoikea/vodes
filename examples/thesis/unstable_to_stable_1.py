@@ -12,7 +12,7 @@ from pymbolic import var
 from vodes.error.utils import PseudoExactSolution, show, AnalysisSolution
 from mpmath import mpf, sqrt
 
-MIN_PREC = 16
+MIN_PREC = 11
 MAX_PREC = 32
 
 MIN_EXP = 8
@@ -43,15 +43,15 @@ context = {
 }
 
 erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
-errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
 erri2 = ia2.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
+errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
 errt2 = ta2.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP, max_exponent=MAX_EXP)
 
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA (SUB)"),
-        AnalysisSolution(bexprs=errt1,name="TA (SUB)"),
         AnalysisSolution(bexprs=erri2,name="IA (DIV)"),
+        AnalysisSolution(bexprs=errt1,name="TA (SUB)"),
         AnalysisSolution(bexprs=errt2,name="TA (DIV)"),
         PseudoExactSolution(func=ex1,name="Exact (SUB)"),
         PseudoExactSolution(func=ex2,name="Exact (DIV)")

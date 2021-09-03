@@ -229,6 +229,8 @@ class Analysis:
             ExactSympyToPymbolicMapper()(t_n + r_n)
         ]
 
+        self._logger.debug(f'{self.func} => {t_n} (T_{n}); {r_n} (R_{n})')
+
         lower = self._config.evaluator(context={},symbols=self.symbols())._minimum(exprs,self._config.dom)
         upper = self._config.evaluator(context={},symbols=self.symbols())._maximum(exprs,self._config.dom)
         
@@ -319,6 +321,7 @@ class Analysis:
     def __abs_maximum(self,f):
         """Determine absolute maximum by comparing the function values at the local extrema"""
         from sympy import diff
+        from sympy.functions.elementary.complexes import Abs
 
         if len(f.free_symbols) > 1:
             raise ValueError("Not supporting to determine maximum for multivariant case.")
@@ -342,7 +345,10 @@ class Analysis:
 
         maximum = None
         for v in vals:
-            res = abs(f.subs(symbol,v))
+            ##
+            # There exists a funny bug within SymPy, where the function may not be properly substituted. Funny..
+            ##
+            res = abs(f.evalf(subs={symbol:v}))
             maximum = res if maximum is None else max(maximum,res)
         
         return maximum

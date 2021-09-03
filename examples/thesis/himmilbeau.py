@@ -24,27 +24,42 @@ MAX_EXP = 8
 # Example is from https://fpbench.org/benchmarks.html
 ##
 
-x = var('x')
-xv = 10
+x1 = var('x1')
+x2 = var('x2')
+sym_xv1 = Quotient(1,10)
+sym_xv2 = Quotient(3,10)
 
-# p := 1 / (sqrt(x+1) + sqrt(x))
-f1 = 1 / (NthRoot(x+1,2) + NthRoot(x,2))
-ia1 = IA(f1)
-ta1 = TA(f1)
-ex1 = lambda: mpf(1) / (sqrt(mpf(xv) + mpf(1)) + sqrt(mpf(xv)))
+xv1 = evaluate(sym_xv1)
+xv2 = evaluate(sym_xv2)
+
+a = (((x1 * x1) + x2) - 11)
+b = ((x1 + (x2 * x2)) - 7)
+
+p = ((a*a) + (b*b))
+
+ia1 = IA(p)
+ta1 = TA(p,{"n":1})
+ta2 = TA(p,{"n":2})
+
+ax1 = lambda: mpf(xv1) * mpf(xv2) + mpf(xv2) - mpf(11)
+bx1 = lambda: mpf(xv1) + mpf(xv2) * mpf(xv2) - mpf(7)
+ex1 = lambda: ax1() * ax1() + bx1() * bx1()
 
 # x ~ 0
 context = {
-    'x' : xv
+    'x1' : sym_xv1,
+    'x2' : sym_xv2
 }
 
 erri1 = ia1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP,max_exponent=MAX_EXP)
 errt1 = ta1.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP,max_exponent=MAX_EXP)
+errt2 = ta2.absolute(context=context, min_precision=MIN_PREC, max_precision=MAX_PREC, min_exponent=MIN_EXP,max_exponent=MAX_EXP)
 
 show(
     solutions=[
         AnalysisSolution(bexprs=erri1,name="IA"),
-        AnalysisSolution(bexprs=errt1,name="TA"),
+        AnalysisSolution(bexprs=errt1,name="TA(n=1)"),
+        AnalysisSolution(bexprs=errt2,name="TA(n=2)"),
         PseudoExactSolution(func=ex1),
     ]
 )

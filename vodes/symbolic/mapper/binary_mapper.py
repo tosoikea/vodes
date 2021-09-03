@@ -44,29 +44,31 @@ class BinaryMapper(RecursiveMapper):
 
     def map_sum(self, expr): 
         res =  self.__split(lambda a,b : Sum((a,b)), expr)
-        self._logger.debug(f'{expr} -> {res}')
+        self._logger.debug(f'{expr} -> {repr(res)}')
         return res
 
     def map_sub(self, expr): 
         res =  self.__split(lambda a,b : Subtraction((a,b)), expr)
-        self._logger.debug(f'{expr} -> {res}')
+        self._logger.debug(f'{expr} -> {repr(res)}')
         return res
 
     def map_product(self, expr):
         res = self.__split(lambda a,b : Product((a,b)), expr)
-        self._logger.debug(f'{expr} -> {res}')
+        self._logger.debug(f'{expr} -> {repr(res)}')
         return res
 
     # always binary (numerator, denominator)
     def map_rational(self, expr):
-        return expr
+        return self.map_quotient(expr)
 
     # always binary (numerator, denominator)
     def map_quotient(self, expr):
-        return Quotient(
+        res = Quotient(
             self.rec(expr.num),
             self.rec(expr.den)
         )
+        self._logger.debug(f'{expr} -> {repr(res)}')
+        return res
 
     # always binary (base, exponent)
     def map_power(self, expr):

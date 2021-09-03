@@ -24,7 +24,7 @@ class Rational(ExtendedExpression):
         self.denominator = denominator
 
     def __getinitargs__(self):
-        return (self.expr,)
+        return (self.num,self.den)
 
     @property
     def num(self):

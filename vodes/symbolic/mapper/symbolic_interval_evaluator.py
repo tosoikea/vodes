@@ -365,6 +365,9 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
                 elif isinstance(r, Variable) or self.is_constant(l):
                     rexpr = Interval(l)
 
+                if bound is None:
+                    continue
+
                 lexpr = lexpr if isinstance(lexpr, Interval) else Interval(lexpr)
                 rexpr = rexpr if isinstance(rexpr, Interval) else Interval(rexpr)
 

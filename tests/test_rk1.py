@@ -5,12 +5,11 @@
 import pytest
 from vodes.ode.runge import RK1
 from vodes.ode.problem import Problem
-from sympy import symbols
-from sympy.functions import exp
+from pymbolic.primitives import Variable
 
 # define functions
-y = symbols('y')
-t = symbols('t')
+y = Variable('y')
+t = Variable('t')
 
 f1 = 3 * y
 f1_c = 3j * y
@@ -21,7 +20,7 @@ def test_rk1_f1():
     l = RK1(p1, {"dt":1})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (1,4),
@@ -36,7 +35,7 @@ def test_rk1_f1_c():
     l = RK1(p1c, {"dt":1})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0, 1), 
         (1, (1+3j)), 
@@ -54,7 +53,7 @@ def test_rk1_v1():
     l = RK1(p1v1, {"dt":0.5})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (0.5,2.5),
@@ -72,7 +71,7 @@ def test_rk1_f2():
     l = RK1(p2, {"dt":1})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (1,1),
@@ -81,7 +80,7 @@ def test_rk1_f2():
         (4,47),
         (5,239)
     ]
-
+    print(actual)
     assert actual == expected
 
 def test_rk1_v2():
@@ -89,7 +88,7 @@ def test_rk1_v2():
     l = RK1(p2v2, {"dt":0.5})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (0.5,1),

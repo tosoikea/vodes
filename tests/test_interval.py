@@ -32,16 +32,13 @@ def static_evaluators():
     from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
 
     return [
-       SE(context={}, symbol=DummyVariable()),
-       CE(context={}, symbol=DummyVariable()),
-       TE(context={}, symbol=DummyVariable())
+       SE(context={})
     ]
 
 def assert_static(res,val):
-    assert(len(res)==1)
-    assert(isinstance(res[0],BoundedExpression))
+    assert(isinstance(res,Interval))
 
-    assert res[0].expr == val
+    assert res == val
 
 
 def test_setup():

@@ -6,12 +6,11 @@ import pytest
 from vodes.ode.runge import RK2
 from vodes.ode.problem import Problem
 import math
-from sympy import symbols
-from sympy.functions import exp
+from pymbolic.primitives import Variable
 
 # define functions
-y = symbols('y')
-t = symbols('t')
+y = Variable('y')
+t = Variable('t')
 
 f1 = 3 * y
 f1_c = 3j * y
@@ -23,7 +22,7 @@ def test_rk2_f1():
     l = RK2(p1, {"dt":1})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (1,8.5),
@@ -38,7 +37,7 @@ def test_rk2_v1():
     l = RK2(p1, {"dt":0.5})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (0.5,3.625),
@@ -57,7 +56,7 @@ def test_rk2_f2():
     l = RK2(p2, {"dt":1})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (1,2),
@@ -74,7 +73,7 @@ def test_rk2_v2():
     l = RK2(p2, {"dt":0.5})
     l.calculate()
 
-    actual = l.solution
+    actual = l.solutions
     expected = [
         (0,1),
         (0.5,1.25),

@@ -10,7 +10,7 @@ from vodes.symbolic.assumption import Assumption
 
 # Custom Expression library
 from vodes.symbolic.expressions.interval import Interval
-from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain
+from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain, MachineError
 from vodes.symbolic.utils import le,ge,gt,lt,minimum,maximum
 
 # Custom Mappers
@@ -18,6 +18,18 @@ from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator
 
 # Expression Library
 from pymbolic.primitives import Expression, Quotient, Variable, Power
+
+def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=None):
+    if context is None:
+        context = {}
+    res = TaylorComparisonEvaluator(context,MachineError(min_prec,max_prec))(expression)
+
+    # Two iterations of solver, if symbolic values are used for evaluation.
+    # This allows to push the floating calculations further up.
+    if float:
+        return evaluate(res, min_prec, max_prec, float, context=context)
+    else:
+        return res
 
 class TaylorComparisonEvaluator(ComparisonEvaluator):
     """Class for determining the exact boundaries of intervals on the basis of function analysis.

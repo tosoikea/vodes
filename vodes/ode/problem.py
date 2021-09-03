@@ -1,5 +1,4 @@
-from sympy import symbols, shape
-from sympy.tensor.functions import NoShapeError
+from vodes.symbolic.expressions.matrix import Matrix
 
 class Problem:
     ##
@@ -14,27 +13,31 @@ class Problem:
         self.__interval = interval
 
         # Differentiate between system of equations and single equation (of first order)
-        try:
-            (_,_) = shape(self.get_expression(*symbols('y t')))
-            self.matrix = True
-        except NoShapeError:
-            self.matrix = False
+        self.matrix = isinstance(iv,Matrix)
+
+        if self.matrix:
+            raise ValueError("Matrix is not yet supported.")
     
     def get_expression(self, y, t):
-        return self.__problem.subs({
-            symbols('y') : y,
-            symbols('t') : t
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
+
+        return substitute(self.__problem, variable_assignments={
+            'y' : y,
+            't' : t
         })
 
+    @property
     def start(self):
         return self.__interval[0]
 
+    @property
     def end(self):
         return self.__interval[1]
 
+    @property
     def initial (self):
         return self.__iv
 
     def validate(self):
-        if len(self.__interval) != 2:
-            exit(-1)
+        assert len(self.__interval) == 2
+        assert self.__interval[0] < self.__interval[1]
