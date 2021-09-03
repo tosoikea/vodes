@@ -197,29 +197,6 @@ class TaylorMapper(ErrorMapper):
 
         # ROUND : (f + ts) * (1+e)
         
-        # (1) TODO :Remainder via IntervalArithmetic
-        rts = [ [] for _ in range(0,self.__n + 2) ]
-        rts[self.__n] = ts[self.__n - 1]
-        rts[self.__n + 1] = ts[self.__n]
-
-        (_,err,_) = expand_taylor_terms(
-            (0,rts),min_prec=self.min_precision,max_prec=self.max_precision,abs=True
-        )
-
-        m = self.__evaluate(
-            err/(self.err**(self.__n+1))
-        )
-
-
-        ts[-1] = [
-            # All terms got absolute value, the only non abs(x) term is the appended machin expression.
-            # However, this value is always > 0
-            Interval(
-                -m.up,
-                m.up
-            )
-        ]
-        
         # (1) TODO :Remainder via IntervalArithmetic, disable rigorousity 
         ts[-1] = [0]
 
@@ -373,34 +350,6 @@ class TaylorMapper(ErrorMapper):
             
 
         # TODO : Remainder
-        derivative = differentiate(derivative, 'x')
-
-        (_,_,total) = expand_taylor_terms(
-            inner,
-            min_prec=self.min_precision,
-            max_prec=self.max_precision,
-            abs=False
-        )
-
-        func = substitute(derivative,
-                {
-                    'x': substitute(total,{self.err.name: self.context[self.err.name]})
-                })
-
-        bounds = self.__evaluate(
-            func
-        )
-
-        m = sum(
-            [
-                self.__evaluate(
-                    Abs(t * bounds)
-                ) for t in ts[self.__n]
-            ]
-        )
-        
-        remainder = Interval(-m,m)
-
         remainder = 0
 
         uts[self.__n] = [remainder]
