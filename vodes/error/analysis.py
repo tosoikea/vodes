@@ -153,7 +153,12 @@ class TaylorAnalysis(Analysis):
             max_exponent=max_exponent
         )
         
-        (_, error, _) = expand_taylor_terms(self.__mapper_instance(self._problem),min_prec=min_precision,max_prec=max_precision,abs=True)
+        (_, error, _) = expand_taylor_terms(
+                self.__mapper_instance(self._problem),
+                min_prec=min_precision,
+                max_prec=max_precision,
+                abs=True
+            )
 
         self._absolute = evaluate(Abs(substitute(
             error,

@@ -170,37 +170,35 @@ class IntervalMapper(ErrorMapper):
 class TaylorMapper(ErrorMapper):
     def __init__(self,n:int,context:dict,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
         from pymbolic.primitives import Variable
-        from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator
+        from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator
         
         super().__init__(context=context,min_precision=min_precision,max_precision=max_precision,min_exponent=min_exponent,max_exponent=max_exponent)
         
         self.err = MachineError(min_precision=min_precision, max_precision=max_precision)
-        self.context[self.err.name] = Interval(self.err.bound.start, self.err.bound.end)
 
         self._logger = logging.getLogger(__name__)
 
         ## Approximations
         assert n > 0
         self.__n = n
-        self.__evaluate = lambda expr: ScalarEvaluator(context=self.context)(expr)
+        self.__evaluate = lambda expr: TaylorComparisonEvaluator(context=self.context,symbol=self.err)(expr)
 
 
     def round(self, te:tuple):
         from vodes.symbolic.expressions.absolute import Abs
         
-        assert len(te) == 2
-        (f,ts) = te
+        assert len(te) == 3
+        (f,ts,r) = te
 
-        self._logger.debug(f'Rounding : {f};{[[str(t) for t in ts]for ts in ts]}')
-        # ts = [ T_1, ..., T_n, R_n \in \mathbb{M}]
-        assert len(ts) == self.__n + 1
+        self._logger.debug(f'Rounding : {f};{[[str(t) for t in ts]for ts in ts]};{r}')
+        # ts = [ T_1, ..., T_n ]
+        # r = R_n \in \mathbb{M}
+        assert len(ts) == self.__n
+        assert not (f is None)
 
         # ROUND : (f + ts) * (1+e)
         
-        # (1) TODO :Remainder via IntervalArithmetic, disable rigorousity 
-        ts[-1] = [0]
-
-        # (2) Append new expansion terms
+        # (1) Append new expansion terms
         for i in range(self.__n - 1,-1,-1):
             # We append, as (TS_i * e^i * e)^(i+1)(0) = TS_i
             exprs = [f] if i == 0 else ts[i-1]
@@ -209,42 +207,48 @@ class TaylorMapper(ErrorMapper):
                 exprs
             )
 
-        self._logger.debug(f'-> {f};{[[str(t) for t in ts]for ts in ts]}')
+        # (2) TODO :Remainder via IntervalArithmetic, disable rigorousity 
+        r += 0
 
-        return (f,ts)
+        self._logger.debug(f'-> {f};{[[str(t) for t in ts]for ts in ts]};{r}')
+        return (f,ts,r)
 
     def map_variable(self, expr):
         # TA(x) = x + 0 + .... + 0
-        ts = [ [] for _ in range(0,self.__n + 1) ]
+        ts = [ [] for _ in range(0,self.__n) ]
 
         return self.round(
-            (expr,ts)
+            (expr,ts,0)
         )
 
     def map_constant(self, expr):
         # TA(c) = c + 0 + .... + 0
-        ts = [ [] for _ in range(0,self.__n + 1) ]
+        ts = [ [] for _ in range(0,self.__n) ]
 
         return self.round(
-            (expr, ts)
+            (expr, ts, 0)
         )
 
     def map_sum(self, expr):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts) = self.rec(expr.children[0])
-        (fr,rts) = self.rec(expr.children[1])
+        (fl,lts,lr) = self.rec(expr.children[0])
+        (fr,rts,rr) = self.rec(expr.children[1])
 
         # TA( (F_0 + TS_0) + (F_1 + TS_1) ) = (F_0 + F_1) + (ts_00 + ts_10) + ... + (ts_0n + ts_1n)
-        
-        for i in range(0, self.__n + 1):
-            lts[i].extend(rts[i])
+        op_ts = [ [] for _ in range(0,self.__n) ]
+        for i in range(0, self.__n):
+            op_ts[i].extend(lts[i])
+            op_ts[i].extend(rts[i])
 
-        self._logger.debug(f'{expr} -> {fl + fr};{[[str(t) for t in ts]for ts in lts]}')
+        op_f = fl + fr
+        op_r = lr + rr
+
+        self._logger.debug(f'{expr} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
 
         res = self.round(
-            (fl + fr, lts)
+            (op_f, op_ts, op_r)
         )
 
         return res
@@ -253,28 +257,34 @@ class TaylorMapper(ErrorMapper):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts) = self.rec(expr.children[0])
-        (fr,rts) = self.rec(expr.children[1])
+        (fl,lts,lr) = self.rec(expr.children[0])
+        (fr,rts,rr) = self.rec(expr.children[1])
 
-        # TA( (F_0 + TS_0) + (F_1 + TS_1) ) = (F_0 + F_1) + (ts_00 + ts_10) + ... + (ts_0n + ts_1n)
-        
-        for i in range(0, self.__n + 1):
-            lts[i].extend([
+        # TA( (F_0 + TS_0) - (F_1 + TS_1) ) = (F_0 - F_1) + (ts_00 - ts_10) + ... + (ts_0n - ts_1n)
+        op_ts = [ [] for _ in range(0,self.__n) ]
+        for i in range(0, self.__n):
+            op_ts[i].extend(lts[i])
+            op_ts[i].extend([
                 -rt for rt in rts[i]
             ])
 
-        self._logger.debug(f'{expr} -> {fl - fr};{[[str(t) for t in ts]for ts in lts]}')
+        op_f = fl - fr
+        op_r = lr - rr
 
-        return self.round(
-            (fl - fr, lts)
+        self._logger.debug(f'{expr} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
+
+        res = self.round(
+            (op_f, op_ts, op_r)
         )
+
+        return res
 
     def map_product(self, expr):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts) = self.rec(expr.children[0])
-        (fr,rts) = self.rec(expr.children[1])
+        (fl,lts,lr) = self.rec(expr.children[0])
+        (fr,rts,rr) = self.rec(expr.children[1])
 
         # TA( (F_0 + TS_0) x (F_1 + TS_1) ) = (F_0 x F_1) + (ts_00F_0 + ts_10F_1) + ...
 
@@ -284,10 +294,10 @@ class TaylorMapper(ErrorMapper):
         # t2 = { { f_1 * t[i][j], t[i][j] \in TS_i }, TS_i \in TS_0 }
         t2 = [ [ fr * t for t in ts ] for ts in lts ]
 
-        # t3 = { { ts[i][a] * ts[j][b], i + j = z - 1, ts[i][a] \in TS_0, ts[j][b] \in TS_1}, z \in {0,...,n} }
-        t3 = [ [  ] for _ in range(self.__n + 1)]
+        # t3 = { { ts[i][a] * ts[j][b], i + j = z - 1, ts[i][a] \in TS_0, ts[j][b] \in TS_1}, z \in {0,...,n - 1} }
+        t3 = [ [  ] for _ in range(self.__n)]
         
-        for z in range(self.__n + 1):
+        for z in range(self.__n):
             # 0 .. z-1
             for i in range(z):
                 # z -1 .. 0
@@ -300,15 +310,16 @@ class TaylorMapper(ErrorMapper):
         # t4 = Remainder
         t4 = 0 #TODO
 
-        ts = t1
-        for i in range(0, self.__n + 1):
-            ts[i].extend(t2[i])
-            ts[i].extend(t3[i])
-        
-        ts[-1].append(t4)
+        op_r = t4
+        op_f = fl * fr
+        op_ts = t1
+
+        for i in range(0, self.__n):
+            op_ts[i].extend(t2[i])
+            op_ts[i].extend(t3[i])
 
         return self.round(
-            (fl * fr, ts)
+            (op_f, op_ts, op_r)
         )
         
     def map_quotient(self, expr):
@@ -327,6 +338,7 @@ class TaylorMapper(ErrorMapper):
 
     def map_interval(self, expr):
         raise NotImplementedError()
+    
     ##
     # UNARY FUNCTIONS
     ##
@@ -337,28 +349,28 @@ class TaylorMapper(ErrorMapper):
 
         from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
 
-        (f,ts) = inner
+        (f,ts,r) = inner
 
-        # First term is outer[f]
-        uf = substitute(outer,{'x' : f})
-        uts = [ [] for _ in range(0,self.__n + 1) ]
+        # (1) Determine F
+        op_f = substitute(outer,{'x' : f})
 
+        # (2) Determine Taylor Expansion Terms
+        op_ts = [ [] for _ in range(0,self.__n) ]
         derivative = outer
         for i in range(self.__n):
             derivative = differentiate(derivative,'x')
-            uts[i] = [t * substitute(derivative,{'x' : f}) for t in ts[i]]
+            op_ts[i] = [t * substitute(derivative,{'x' : f}) for t in ts[i]]
             
 
-        # TODO : Remainder
-        remainder = 0
+        # TODO : (3) Determine Remainder
+        op_r = 0
 
-        uts[self.__n] = [remainder]
-
-        self._logger.debug(f'{outer};{f};{[[str(t) for t in ts]for ts in ts]} -> {uf};{[[str(t) for t in ts]for ts in uts]}')
+        self._logger.debug(f'{outer};{f};{[[str(t) for t in ts]for ts in ts]};{r} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
         
         return self.round(
-            (uf, uts)
+            (op_f, op_ts, op_r)
         )
+
     def map_power(self, expr):
         from pymbolic.primitives import Power, Variable
 
@@ -402,21 +414,19 @@ class TaylorMapper(ErrorMapper):
 
 def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
     from functools import reduce
-    assert len(te) == 2
+    assert len(te) == 3
 
     err = MachineError(min_precision=min_prec,max_precision=max_prec)
 
-    inner = lambda x,i: x * Interval(err.bound.start, err.bound.end) ** (i+1)
+    inner = lambda x,i: x * Interval(-err, +err) ** (i+1)
     outer = lambda i : 1
 
     if abs:
         inner = lambda x,i: x
         outer = lambda i: err**(i+1)
     
-    (f,ts) = te
+    (f,ts,r) = te
 
-    # Simplifies terms
-    
     _error = 0
 
     for i in range(len(ts)):
@@ -425,5 +435,8 @@ def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
                 inner(t,i) for t in ts[i]
             ]
         ) * outer(i)
-    
+
+    # Last term consists of CONSTANT remainder
+    # Contextually  e^(n+1) * M / e^(n+1) == M
+    _error += r
     return (f, _error, f + _error)
