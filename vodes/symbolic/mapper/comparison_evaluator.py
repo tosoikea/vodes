@@ -500,13 +500,13 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             ]
 
         # (2) Analyze expression
-        minima = self.analysis(problems=problems,d=boundary,method="max")
+        maxima = self.analysis(problems=problems,d=boundary,method="max")
 
         # (3) Construct BoundedExpressions
         res = []
         
-        for i in range(len(minima)):
-            for boundary in minima[i]:
+        for i in range(len(maxima)):
+            for boundary in maxima[i]:
                 res.append(
                     BoundedExpression(
                         expression=problems[i].expr,
@@ -552,10 +552,8 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             res[i][i] = [d]
 
             # (2) Fill upper triangular matrix incorporating previous results
-            # TODO : Rethink how to limit comparisons, as seen in the previous example, without redundant splitting for e.g. equal equations
-            # res[i][j] = d.difference(res[j][i])
             for j in range(i):
-                res[i][j] = problems[i].compare(problems[j],cmp,d=d)
+                res[i][j] = d.difference(res[j][i])
 
             # (3) Fill lower triangular matrix with comparison results
             for j in range(i+1,len(problems)):
