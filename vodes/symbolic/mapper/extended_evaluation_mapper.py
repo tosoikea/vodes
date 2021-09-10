@@ -15,6 +15,7 @@ def evaluate(expression, context=None, float:bool=False):
         return res
 
 class ExtendedEvaluationMapper(EvaluationMapper):
+    """Class extending the default symbolic evaluation mapper to support custom expressions."""
     def map_sub(self,expr):
         from functools import reduce
 

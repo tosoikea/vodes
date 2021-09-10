@@ -170,7 +170,7 @@ class IntervalMapper(ErrorMapper):
 class TaylorMapper(ErrorMapper):
     def __init__(self,n:int,context:dict,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
         from pymbolic.primitives import Variable
-        from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator
+        from vodes.symbolic.mapper.taylor_evaluator import TaylorEvaluator
         
         super().__init__(context=context,min_precision=min_precision,max_precision=max_precision,min_exponent=min_exponent,max_exponent=max_exponent)
         
@@ -181,7 +181,7 @@ class TaylorMapper(ErrorMapper):
         ## Approximations
         assert n > 0
         self.__n = n
-        self.__evaluate = lambda expr: TaylorComparisonEvaluator(context=self.context,symbol=self.err)(expr)
+        self.__evaluate = lambda expr: TaylorEvaluator(context=self.context,symbol=self.err)(expr)
 
 
     def round(self, te:tuple):

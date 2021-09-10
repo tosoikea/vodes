@@ -12,7 +12,7 @@ from pymbolic.primitives import Variable, Power
 from pymbolic.mapper.stringifier import StringifyMapper
 
 class Domain:
-    """Class to represent the domain of an expression.
+    """Class implementing a domain using interval notation. The domain can range from infinity and supports both closed and open intervals.
     
     Args:
         start: Beginning of the domain.
@@ -325,5 +325,4 @@ def intersect(ls:list,rs:list):
         
             res.append(combined)
             
-    return res 
-
+    return res

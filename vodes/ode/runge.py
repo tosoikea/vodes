@@ -1,5 +1,5 @@
 from vodes.ode.solver import Solver
-from pymbolic.primitives import Variable
+from pymbolic.primitives import Variable, Quotient
 from abc import ABC, abstractmethod
 
 class RK(Solver,ABC):
@@ -69,7 +69,7 @@ class RK2(RK):
         k2 = Variable('k2')
         
         # y_n + h / 2 * [ f(y_n,t_n) + f(t_n + h, y_n + h * f(y_n + t_n)) ]
-        step = y + self.dt / 2 * (k1 + k2)
+        step = y + Quotient(self.dt,2) * (k1 + k2)
 
         step = substitute(step, {k2 : self.problem.get_expression(y + self.dt * k1, t + self.dt)})
         step = substitute(step, {k1 : self.problem.get_expression(y, t)})
@@ -77,14 +77,21 @@ class RK2(RK):
         return step
 
 class RK4(RK):
-    def _kutta_step(self, problem):
-        k1, k2, k3, k4 = self._get_sym(["k1", "k2", "k3", "k4"])
+    def _step(self, y, t):
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
 
-        step = self.y + self.h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        k1 = Variable('k1')
+        k2 = Variable('k2')
+        k3 = Variable('k3')
+        k4 = Variable('k4')
 
-        step = step.subs(k4, problem.get_expression(self.y + self.h * k3, self.t + self.h))
-        step = step.subs(k3, problem.get_expression(self.y + self.h / 2 * k2, self.t + self.h / 2))
-        step = step.subs(k2, problem.get_expression(self.y + self.h / 2 * k1, self.t + self.h / 2))
-        step = step.subs(k1, problem.get_expression(self.y, self.t))
+        step = y + Quotient(self.dt,6) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+        step = substitute(step, {k4, self.problem.get_expression(y + self.dt * k3, t + self.dt)})
+
+        step = substitute(step, {k3, self.problem.get_expression(y + Quotient(self.dt,2) * k2, t + Quotient(self.dt,2))})
+        step = substitute(step, {k2, self.problem.get_expression(y + Quotient(self.dt,2) * k1, t + Quotient(self.dt,2))})
+
+        step = substitute(step, {k1, self.problem.get_expression(y, t)})
 
         return step

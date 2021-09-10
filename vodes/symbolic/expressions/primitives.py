@@ -8,6 +8,7 @@ from pymbolic.mapper import RecursiveMapper
 from pymbolic.mapper.stringifier import StringifyMapper, PREC_NONE
 
 class ExtendedExpression(Expression):
+    """Class to represent an extended expression where the subtraction is realized using a custom Subtraction expression."""
     def __sub__(self, other):
         if not is_valid_operand(other):
             return NotImplemented

@@ -27,7 +27,7 @@ def evaluators():
 
 @pytest.fixture
 def static_evaluators():
-    from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator as TE
+    from vodes.symbolic.mapper.taylor_evaluator import TaylorEvaluator as TE
     from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator as CE
     from vodes.symbolic.mapper.scalar_evaluator import ScalarEvaluator as SE
 
@@ -185,8 +185,8 @@ def test_interval_pow1(evaluators):
     #   a) -1 \in [-2,2] (Boundary)
     #   b) 0 <= f([-2,-1]), 0 >= f([-1,2])
     # 4. 
-    # =>    [-2,-1] min : (x+1)**2 ,   max : (x-1)**2
-    #       (-1, 0] min : 0        ,   max : (x-1)**2
+    # =>    [-2,-1) min : (x+1)**2 ,   max : (x-1)**2
+    #       [-1, 0) min : 0        ,   max : (x-1)**2
     #       (0 , 1] min : 0        ,   max : (x+1)**2
     #       (1 , 2] min : (x-1)**2 ,   max : (x+1)**2
 
@@ -194,7 +194,8 @@ def test_interval_pow1(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=-2,
-                end=-1
+                end=-1,
+                right_open=True
             ),
             expression=Interval(
                 lower=Power(x+1,u1),
@@ -205,7 +206,7 @@ def test_interval_pow1(evaluators):
             boundary=Domain(
                 start=-1,
                 end=0,
-                left_open=True
+                right_open=True
             ),
             expression=Interval(
                 lower=0,
@@ -215,8 +216,7 @@ def test_interval_pow1(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=0,
-                end=1,
-                left_open=True
+                end=1
             ),
             expression=Interval(
                 lower=0,
@@ -347,8 +347,8 @@ def test_interval_pow4(evaluators):
     #   a) 10 \not\in [-5,5] (Boundary)
     #   b) 0 >= f([-5,5])
     # 4. 
-    # =>    [-5, 0] min : x^2      ,   max : (0.01x^3-10)^2
-    #       (0,  5] min : 0        ,   max : (0.01x^3-10)^2
+    # =>    [-5, 0) min : x^2      ,   max : (0.01x^3-10)^2
+    #       [0,  5] min : 0        ,   max : (0.01x^3-10)^2
 
     # [x,0.01*x^3-10]
     lower = Quotient(1,100) * x ** 3 - 10
@@ -359,7 +359,8 @@ def test_interval_pow4(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=-5,
-                end=0
+                end=0,
+                right_open=True
             ),
             expression=Interval(
                 lower=x**u1,
@@ -369,8 +370,7 @@ def test_interval_pow4(evaluators):
         BoundedExpression(
             boundary=Domain(
                 start=0,
-                end=5,
-                left_open=True
+                end=5
             ),
             expression=Interval(
                 lower=0,

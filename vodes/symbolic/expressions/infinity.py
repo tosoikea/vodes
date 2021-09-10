@@ -1,6 +1,7 @@
 from sys import intern
 
 class Infinity:
+    "Class representing infinity. Importantly, is is not inheriting an expression, as we do NOT support infinity within the symbolic expression of our error analysis."
     def __str__(self) -> str:
         return f'oo'
 
@@ -32,6 +33,7 @@ class Infinity:
         return hash(Infinity)
 
 class NegativeInfinity:
+    "Class representing negative infinity. Importantly, is is not inheriting an expression, as we do NOT support infinity within the symbolic expression of our error analysis."
     def __str__(self) -> str:
         return f'-oo'
 

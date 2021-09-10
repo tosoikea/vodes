@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from vodes.symbolic.analysis import Analysis, AnalysisConfig
 
 # Assumption library
@@ -14,7 +14,7 @@ from vodes.symbolic.expressions.infinity import Infinity, NegativeInfinity
 from vodes.symbolic.utils import compare, le,ge,gt,lt,minimum,maximum
 
 # Custom Mappers
-from vodes.symbolic.mapper.symbolic_interval_evaluator import ExactIntervalEvaluator
+from vodes.symbolic.mapper.interval_evaluator import IntervalEvaluator
 
 # Expression Library
 from pymbolic.primitives import Expression, Quotient, Variable, Power
@@ -31,21 +31,19 @@ def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=N
     else:
         return res
 
-class ComparisonEvaluator(ExactIntervalEvaluator):
+class ComparisonEvaluator(IntervalEvaluator):
     """Class for determining the exact boundaries of intervals on the basis of function analysis, powered by sympy."""
 
     def __init__(self, context: dict, symbol: BoundedVariable):
         super().__init__(context=context, symbol=symbol)
-        self._assumptions = {
-            "_minimum": [],
-            "_maximum": [],
-            "_ipow": [
-                Assumption(
-                    property=IsScalar()
-                )
-            ],
-            "_icontains":[]
-        }
+        self._assumptions["_ipow"] = (
+                # Right Item (Exponent) has to be scalar value
+                [],[
+                    Assumption(
+                        property=IsScalar()
+                    )
+                ]
+            )
 
     def common_symbolic_expression(self, expr:Expression, iv:Interval, d:Domain, extrema:list=[], invalid_bounds:List[Domain]=None) -> list:
         """
@@ -125,7 +123,7 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
                     ]
                 )
 
-        return self.__merge_bounded_expressions(res) 
+        return self.__merge_bounded_expressions(res)
 
     ####
     # INTERVAL INTERFACE
@@ -245,15 +243,6 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         from vodes.symbolic.mapper.simplification_mapper import simplify
         self._logger.info('==INTERVAL POW==')
 
-        # TODO : Maybe convert to scalar interval, requires support for interval exponentiation
-        exprs = [
-            BoundedExpression(expression=r,boundary=d),
-        ]
-        for assumption in self._assumptions.get(self._ipow.__name__):
-            exprs = assumption.validate(
-                exprs
-            )
-
         if not (r.low == r.up):
             raise ValueError("The IntersectionEvaluator does not support non degenerate interval exponents")
 
@@ -372,14 +361,6 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
         from functools import cmp_to_key
         self._logger.info('==INTERVAL CONTAINS==')
 
-        exprs = [
-            BoundedExpression(expression=expr,boundary=d),
-            ]
-        for assumption in self._assumptions.get(self._icontains.__name__):
-            exprs = assumption.validate(
-                exprs
-            )
-
         res = [
             # (
             #   Boundary ( start, end ),
@@ -387,29 +368,30 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
             # )
         ]
 
-        for bexpr in exprs:
-            if not ("up" in incl) :
-                upper_contained = [d]
-            else:
-                upper = Analysis(bexpr.expr.up,config=AnalysisConfig(d=bexpr.bound))
-                upper_contained = upper.compare(val,lambda u,v: u>=v)
+        if not ("up" in incl) :
+            upper_contained = [d]
+        else:
+            # TODO : multivariate support
+            upper = Analysis(expr.up,config=AnalysisConfig(d=d))
+            upper_contained = upper.compare(val,lambda u,v: u>=v)
 
-            if not ("low" in incl) :
-                lower_contained = [d]
-            else:
-                lower = Analysis(bexpr.expr.low,config=AnalysisConfig(d=bexpr.bound))
-                lower_contained = lower.compare(val,lambda l,v: l<=v)
+        if not ("low" in incl) :
+            lower_contained = [d]
+        else:
+            # TODO : multivariate support
+            lower = Analysis(expr.low,config=AnalysisConfig(d=d))
+            lower_contained = lower.compare(val,lambda l,v: l<=v)
 
-            for u in upper_contained:
-                for l in lower_contained:
-                    combined = u.intersect(l)
+        for u in upper_contained:
+            for l in lower_contained:
+                combined = u.intersect(l)
 
-                    if combined is None:
-                        continue
-                    
-                    res.append(
-                        (combined,[val])
-                    )
+                if combined is None:
+                    continue
+                
+                res.append(
+                    (combined,[val])
+                )
 
         excluded = d.difference(list(map(lambda r:r[0],res)))
         for boundary in excluded:
@@ -428,23 +410,11 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
     ####
     def _minimum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
         exprs = list(set(exprs))
-        translated = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
-        for assumption in self._assumptions.get(self._minimum.__name__):
-            translated = assumption.validate(
-                translated
-            )
 
-            # TODO
-            # At the moment, we expect the expression at the index i of exprs to equal the expression at the same index after the translation.
-            # If we were to support division within the translations, we require lists of lists to not loose the association between the initial and the translated expression(s).
-            # We therefore introduce the assumption : exprs[i] => res[i].expr && boundary == res[i].bound
-            #  
-            if len(translated) != len(exprs):
-                raise ValueError("It is not yet supported, to divide the domain of expressions within translations.")
-
+        (lassums) = self._assumptions.get("_minimum")
         candidates = [
-            val.expr if not isinstance(val.expr,Interval) else val.expr.low for val in translated
-        ] 
+            expr if not isinstance(expr, Interval) else expr.low for expr in self._apply_assumptions(lassums, exprs, boundary)
+        ]
 
         self._logger.debug(f"Determining minima for {list(map(str,candidates))}") 
       
@@ -474,23 +444,10 @@ class ComparisonEvaluator(ExactIntervalEvaluator):
     def _maximum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
         exprs = list(set(exprs))
 
-        translated = [BoundedExpression(expression=expr,boundary=boundary) for expr in exprs]
-        for assumption in self._assumptions.get(self._minimum.__name__):
-            translated = assumption.validate(
-                translated
-            )
-
-            # TODO
-            # At the moment, we expect the expression at the index i of exprs to equal the expression at the same index after the translation.
-            # If we were to support division within the translations, we require lists of lists to not loose the association between the initial and the translated expression(s).
-            # We therefore introduce the assumption : exprs[i] => res[i].expr && boundary == res[i].bound
-            #  
-            if len(translated) != len(exprs):
-                raise ValueError("It is not yet supported, to divide the domain of expressions within translations.")
-
+        (lassums) = self._assumptions.get("_maximum")
         candidates = [
-            val.expr if not isinstance(val.expr,Interval) else val.expr.up for val in translated
-        ] 
+            expr if not isinstance(expr, Interval) else expr.low for expr in self._apply_assumptions(lassums, exprs, boundary)
+        ]
 
         self._logger.debug(f"Determining maxima for {list(map(str,candidates))}") 
       

@@ -7,6 +7,7 @@ def substitute(expression, variable_assignments=None):
     return ExtendedSubstitutionMapper(make_subst_func(variable_assignments))(expression)
 
 class ExtendedSubstitutionMapper(SubstitutionMapper):
+    """Class extending the default symbolic substitution mapper to support custom expressions."""
     def map_variable(self, expr):
         result = self.subst_func(expr)
         if result is not None:

@@ -56,7 +56,7 @@ def test_minimum2():
 
     # Assert
     expected = [
-        BoundedExpression(exprs[1],Domain(-2,0,False,False)),
+        BoundedExpression(exprs[1],Domain(-2,0,False,True)),
         BoundedExpression(exprs[0],Domain(0,2,False,False))
     ]
 

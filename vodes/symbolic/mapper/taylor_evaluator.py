@@ -17,12 +17,11 @@ from vodes.symbolic.utils import le,ge,gt,lt,minimum,maximum
 from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator
 
 # Expression Library
-from pymbolic.primitives import Expression, Quotient, Variable, Power
 
 def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=None):
     if context is None:
         context = {}
-    res = TaylorComparisonEvaluator(context,MachineError(min_prec,max_prec))(expression)
+    res = TaylorEvaluator(context,MachineError(min_prec,max_prec))(expression)
 
     # Two iterations of solver, if symbolic values are used for evaluation.
     # This allows to push the floating calculations further up.
@@ -31,24 +30,24 @@ def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=N
     else:
         return res
 
-class TaylorComparisonEvaluator(ComparisonEvaluator):
+class TaylorEvaluator(ComparisonEvaluator):
     """Class for determining the exact boundaries of intervals on the basis of function analysis.
     TODO : Describe in depth, firstly in thesis."""
 
     def __init__(self, context: dict, symbol: BoundedVariable):
         super().__init__(context=context, symbol=symbol)
         
-        self._assumptions["_minimum"] = [
+        self._assumptions["_minimum"] = ([
                 Assumption(
                     property=IsPolynomial(n=2),
                     translation=ToTaylor(n=2,limit=2**5)
                 )
-            ]
+            ])
 
-        self._assumptions["_maximum"] = [
+        self._assumptions["_maximum"] = ([
                 Assumption(
                     property=IsPolynomial(n=2),
                     translation=ToTaylor(n=2,limit=2**5)
                 )
-            ]
+            ])
     

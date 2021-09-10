@@ -5,7 +5,7 @@ from vodes.symbolic.expressions.bounded import Domain, DummyVariable
 from vodes.symbolic.expressions.infinity import Infinity, NegativeInfinity
 
 # Custom Mapper
-from vodes.symbolic.mapper.symbolic_interval_evaluator import SymbolicIntervalEvaluator
+from vodes.symbolic.mapper.interval_evaluator import IntervalEvaluator
 
 class AnalysisConfig:
     @property
@@ -34,7 +34,7 @@ class AnalysisConfig:
         else:
             return self.evaluator(context=context,symbols=[DummyVariable()])
 
-    def __init__(self, limit:int=None,d:Domain=None,evaluator:Type[SymbolicIntervalEvaluator]=None):
+    def __init__(self, limit:int=None,d:Domain=None,evaluator:Type[IntervalEvaluator]=None):
         from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator
 
         # TODO : Complex support

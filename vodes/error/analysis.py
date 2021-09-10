@@ -11,7 +11,7 @@ from vodes.symbolic.expressions.interval import Interval
 from vodes.error.mapper import IntervalMapper
 from vodes.symbolic.mapper.binary_mapper import BinaryMapper as BM
 from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympyToPymbolicMapper
-from vodes.symbolic.mapper.taylor_comparison_evaluator import TaylorComparisonEvaluator as IE
+from vodes.symbolic.mapper.taylor_evaluator import TaylorEvaluator as IE
 
 # Symbolic Expression
 from pymbolic.primitives import Expression, Power

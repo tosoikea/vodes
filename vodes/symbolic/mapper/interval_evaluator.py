@@ -1,7 +1,7 @@
 import logging
 
 from abc import abstractmethod, ABC
-from typing import List
+from typing import Dict, List
 from vodes.symbolic.expressions.primitives import Subtraction
 
 # Custom Expression library
@@ -18,12 +18,7 @@ from pymbolic.primitives import Quotient, Variable, Sum, Product, Expression, Po
 # Expression Mapper
 from pymbolic.mapper import RecursiveMapper
 
-#TODO : Inward and outward rounding
-class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
-    @classmethod
-    def is_multivariant(cls) -> bool:
-        return False
-
+class IntervalEvaluator(ABC, RecursiveMapper):
     """Class to evaluate expressions containing symbolic intervals. These expressions have to be limited to one free variable after substitution.
 
     Args:
@@ -32,17 +27,29 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
     Attributes:
         _context (dict): The stored substitution dictionary.
-        _symbol (BoundedVariable): The stored symbol, only allowed free variable.
+        _symbol (BoundedVariable): The only allowed free variables.
     """
     def __init__(self, context: dict, symbol: BoundedVariable):
-        assert(not context is None)
-        assert(symbol)
+        assert (symbol)
 
         self._logger = logging.getLogger(__name__)
-        self._context = context
+
+        self._context = context if context is not None else {}
         self._symbol = symbol
-        self._assumptions = {}
-    
+        self._assumptions = {
+            "_iadd" : ([],[]),      #l,r
+            "_isub" : ([],[]),      #l,r
+            "_idiv" : ([],[]),      #l,r
+            "_imul" : ([],[]),      #l,r
+            "_ipow" : ([],[]),      #l,r
+            "_iabs" : ([]),         #l
+            "_inthroot" : ([]),     #l
+            "_isin" : ([]),         #l
+            "_icos" : ([]),         #l
+            "_icontains" : ([]),    #l
+            "_minimum" : ([]),      #l
+            "_maximum" : ([])       #l
+        }
 
     ####
     # EXPRESSION MAPPING
@@ -82,8 +89,8 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
         res = None
 
-        # vexpr do not substitute the free symbol
-        if not str(self._symbol.name) in self._context and self._symbol.name == expr.name:
+        # vexpr do not substitute free symbols
+        if not expr.name in self._context and expr.name == self._symbol.name:
             vexpr = Interval(expr)
         else:
             try:
@@ -163,6 +170,8 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
 
     def map_interval(self, expr:Interval) -> List[BoundedExpression]:
         from vodes.symbolic.mapper.bounded_mapper import BoundedMapper
+
+        # Simply maps all expressions to boundedexpressions
         l = BoundedMapper(context=self._context, symbol=self._symbol)(expr.low)
         r = BoundedMapper(context=self._context, symbol=self._symbol)(expr.up)
 
@@ -186,69 +195,36 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         return res
 
     def map_absolute(self, expr:Abs) -> List[BoundedExpression]:
-        res = []
-        bexprs = self.rec(expr.expr)
-
-        for bexpr in bexprs:
-            res.extend(
-                self._iabs(i=bexpr.expr, d=bexpr.bound)
-            )
+        res = self.__unary_apply(
+            self._iabs,
+            self.rec(expr.expr)
+        )
 
         self._logger.info(f'(ABS) : {expr} -> {list(map(str,res))}')
         return res
 
     ## FUNCTIONS
     def map_nthroot(self, expr:NthRoot) -> List[BoundedExpression]:
-        bexprs = self.rec(expr.expr)
-        res = []
-
-        for bexpr in bexprs:
-            res.extend(
-                self._inthroot(
-                    bexpr.expr,
-                    n=expr.n,
-                    d=bexpr.bound
-                )
-            )
+        res = self.__unary_apply(
+            self._inthroot,
+            self.rec(expr.expr),
+            opt=(expr.n,)
+        )
 
         self._logger.info(f'(NTHROOT) : {expr} -> {list(map(str,res))}')
         return res
 
     def map_sin(self, expr:sin) -> List[BoundedExpression]:
-        bexprs = self.rec(expr.expr)
-        res = []
-
-        for bexpr in bexprs:
-            res.extend(
-                self._isin(
-                    bexpr.expr,
-                    d=bexpr.bound
-                )
-            )
-
-        self._logger.info(f'(SIN) : {expr} -> {list(map(str,res))}')
-        return res
+        raise NotImplementedError()
 
     def map_cos(self, expr:cos) -> List[BoundedExpression]:
-        bexprs = self.rec(expr.expr)
-        res = []
-
-        for bexpr in bexprs:
-            res.extend(
-                self._icos(
-                    bexpr.expr,
-                    d=bexpr.bound
-                )
-            )
-
-        self._logger.info(f'(COS) : {expr} -> {list(map(str,res))}')
-        return res
+        raise NotImplementedError()
 
     ####
     # INTERVAL INTERFACE
     ####
     @abstractmethod
-    def _iadd(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
+    def _iadd(self, l:Interval, r:Interval, d:Domain) -> List[BoundedExpression]:
         """Interval addition as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2.
         
         Args:
@@ -262,7 +238,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
 
     @abstractmethod
-    def _isub(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
+    def _isub(self, l:Interval, r:Interval, d:Domain) -> List[BoundedExpression]:
         """Interval substitution as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2.
         
         Args:
@@ -276,7 +252,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
 
     @abstractmethod
-    def _idiv(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
+    def _idiv(self, l:Interval, r:Interval, d:Domain) -> List[BoundedExpression]:
         """Interval division as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2.
         
         Args:
@@ -290,7 +266,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
 
     @abstractmethod
-    def _imul(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
+    def _imul(self, l:Interval, r:Interval, d:Domain) -> List[BoundedExpression]:
         """Interval multiplication as defined within https://epubs.siam.org/doi/abs/10.1137/1.9780898717716.ch2. Because symbolic intervals are supported, the inheriting classes define custom evaluations for symbolic cases.
         
         Args:
@@ -304,7 +280,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
 
     @abstractmethod
-    def _ipow(self, l:Interval, r:Interval, d: Domain) -> List[BoundedExpression]:
+    def _ipow(self, l:Interval, r:Interval, d:Domain) -> List[BoundedExpression]:
         pass
     
     @abstractmethod
@@ -324,7 +300,7 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
         pass
     
     @abstractmethod
-    def _icontains(self, expr:Interval, val, d: Domain, incl:set=set(("up","low"))) -> list:
+    def _icontains(self, expr:Interval, val, d:Domain, incl:set=set(("up","low"))) -> list:
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         pass
 
@@ -332,50 +308,93 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
     # SYMBOLIC EXPRESSION INTERFACE
     ####
     @abstractmethod
-    def _minimum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
+    def _minimum(self, exprs:List[Expression],d:Domain) -> List[BoundedExpression]:
         pass
 
     @abstractmethod
-    def _maximum(self, exprs:List[Expression],boundary:Domain) -> List[BoundedExpression]:
+    def _maximum(self, exprs:List[Expression],d:Domain) -> List[BoundedExpression]:
         pass
 
     ####
     # UTILITY FUNCTIONS
     ####
-    def __apply(self, op, ls: list, rs: list):
-        res = []
+    def _apply_assumptions(self, assumptions:list, exprs:list, d):
+        translated = [BoundedExpression(expression=expr,boundary=d) for expr in exprs]
+
+        for assumption in assumptions:
+            translated = assumption.validate(
+                translated
+            )
+
+            # TODO
+            # At the moment, we expect the expression at the index i of exprs to equal the expression at the same index after the translation.
+            # If we were to support division within the translations, we require lists of lists to not loose the association between the initial and the translated expression(s).
+            # We therefore introduce the assumption : exprs[i] => res[i].expr && boundary == res[i].bound
+            #  
+            if len(translated) != len(exprs):
+                raise ValueError("It is not yet supported, to divide the domain of expressions within translations.")
+        
+        return [val.expr for val in translated]
+
+    def __convert_expr(self, l, d):
+        expr = l
+
+        if isinstance(l, BoundedExpression):
+            d = d.intersect(l.bound)
+            expr = l.expr
+        # May result from BoundedMapper
+        elif isinstance(l, Variable) or self.is_constant(l):
+            expr = Interval(l)
+
+        # Implicit interval conversion (degenerate)
+        if not isinstance(expr, Interval):
+            expr = Interval(expr)
+
+        return (expr,d)
+
+    def __unary_apply(self, op, ls:list, opt:tuple = None):
+        res = []        
+        
+        (lassums) = self._assumptions.get(op.__name__)
 
         for l in ls:
-            for r in rs:
-                bound = self._symbol.bound
-                lexpr = l
-                rexpr = r
+            (lexpr,domain) = self.__convert_expr(l,self._symbol.bound)
 
-                if isinstance(l, BoundedExpression):
-                    bound = bound.intersect(l.bound)
-                    lexpr = l.expr
-                # May result from BoundedMapper
-                elif isinstance(l, Variable) or self.is_constant(l):
-                    lexpr = Interval(l)
+            if domain is None:
+                continue
 
-                if isinstance(r, BoundedExpression):
-                    bound = bound.intersect(r.bound)
-                    rexpr = r.expr
-                # May result from BoundedMapper
-                elif isinstance(r, Variable) or self.is_constant(l):
-                    rexpr = Interval(l)
+            lexpr = self._apply_assumptions(lassums,[lexpr],domain)[0]
 
-                if bound is None:
-                    continue
-
-                lexpr = lexpr if isinstance(lexpr, Interval) else Interval(lexpr)
-                rexpr = rexpr if isinstance(rexpr, Interval) else Interval(rexpr)
-
-                res.extend(op(lexpr, rexpr, bound))
+            res.extend(
+                op(lexpr, domain) if opt is None else op(lexpr, *opt, domain)
+            )
 
         return res
 
-    def contains(self, iv:Interval, xs, d: Domain) -> list:
+    def __apply(self, op, ls: list, rs: list):
+        res = []
+
+        (lassums,rassums) = self._assumptions.get(op.__name__)
+
+        for l in ls:
+            for r in rs:
+                (lexpr,domain) = self.__convert_expr(l,self._symbol.bound)
+                (rexpr,domain) = self.__convert_expr(r,domain)
+
+                if domain is None:
+                    continue
+
+                res.extend(
+                    op(
+                        self._apply_assumptions(lassums,[lexpr],domain)[0], 
+                        self._apply_assumptions(rassums,[rexpr],domain)[0],
+                        domain
+                    )
+                )
+
+        return res
+
+    def contains(self, iv:Interval, xs, d:Domain) -> list:
         """Determine the inclusion of any values of a boundary based on the inclusion of the upper and lower boundaries. For the interval to include a value, both boundaries have to include it."""  
         from vodes.symbolic.utils import le,ge
         from vodes.symbolic.expressions.infinity import NegativeInfinity, Infinity
@@ -470,17 +489,3 @@ class SymbolicIntervalEvaluator(ABC, RecursiveMapper):
             
         self._logger.debug(f'Combined boundary section {lower_sections}(l) and {upper_sections}(u) to {res}')
         return res
-
-
-class ApproxIntervalEvaluator(SymbolicIntervalEvaluator):
-    """Super class for those interval evaluators, who evaluate symbolic cases approximatively.
-    """
-    def __init__(self, context: dict, symbol: Variable):
-        super().__init__(context=context, symbol=symbol)
-
-
-class ExactIntervalEvaluator(SymbolicIntervalEvaluator):
-    """Super class for those interval evaluators, who evaluate symbolic cases exactly (costly).
-    """
-    def __init__(self, context: dict, symbol: Variable):
-        super().__init__(context=context, symbol=symbol)

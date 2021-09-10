@@ -12,6 +12,7 @@ def differentiate(expression,
         )(expression)
 
 class ExtendedDifferentiationMapper(DifferentiationMapper):
+    """Class extending the default symbolic differentiation mapper to support custom expressions."""
     def map_sub(self,expr):
         from vodes.symbolic.expressions.primitives import Subtraction
 
