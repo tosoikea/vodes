@@ -608,7 +608,7 @@ class TaylorMapper(ErrorMapper):
         )
 
 
-def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
+def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False,separated:bool=False):
     """Converts the taylor form to its written out form"""
     from vodes.symbolic.expressions.absolute import Abs
     
@@ -623,15 +623,11 @@ def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
     if abs:
         inner = lambda x,i: Abs(x)
         outer = lambda x,i: x * err**i
-
-    _error = 0
     
     # (1) Order one
-    _error += outer(
-        sum([
+    _error_one = sum([
             inner(c,1) for c in c1
-        ]),1
-    )
+        ])
 
     # (2) Order two
     _error_two = 0
@@ -640,6 +636,11 @@ def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
         for j in range(i,len(c1)):
             _error_two += inner(c2[i][j] + c2[j][i],2)
     
-    _error += outer(_error_two,2)
-
-    return (f, _error, f + _error)
+   
+    if separated:
+        return (f,
+            [(_error_one,outer(1,1)),(_error_two,outer(1,2))]
+        )
+    else:
+        _error = outer(_error_one,1) + outer(_error_two,2)
+        return (f, _error, f + _error)

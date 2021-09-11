@@ -18,15 +18,16 @@ from vodes.symbolic.mapper.comparison_evaluator import ComparisonEvaluator
 
 # Expression Library
 
-def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=None):
+
+def evaluate(expression, symbol:BoundedVariable, float:bool=False, context=None):
     if context is None:
         context = {}
-    res = TaylorEvaluator(context,MachineError(min_prec,max_prec))(expression)
+    res = TaylorEvaluator(context,symbol)(expression)
 
     # Two iterations of solver, if symbolic values are used for evaluation.
     # This allows to push the floating calculations further up.
     if float:
-        return evaluate(res, min_prec, max_prec, float, context=context)
+        return evaluate(res, symbol, float, context=context)
     else:
         return res
 

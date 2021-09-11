@@ -21,10 +21,10 @@ from pymbolic.primitives import Expression, Quotient
 
 # Expression Mapper
 
-def evaluate(expression, context=None, float:bool=False):
+def evaluate(expression, context=None, float:bool=False, verify:bool=False):
     if context is None:
         context = {}
-    res = ScalarEvaluator(context,DummyVariable())(expression)
+    res = ScalarEvaluator(context,DummyVariable(),verify)(expression)
 
     # Two iterations of solver, if symbolic values are used for evaluation.
     # This allows to push the floating calculations further up.
@@ -35,28 +35,30 @@ def evaluate(expression, context=None, float:bool=False):
 
 class ScalarEvaluator(IntervalEvaluator):
     """Class for determining the exact boundaries of intervals on the basis of function analysis."""
-    def __init__(self, context: dict, symbol:BoundedVariable):
+    def __init__(self, context: dict, symbol:BoundedVariable, verify:bool=False):
         super().__init__(context=context, symbol=symbol)
-        self._assumptions["_minimum"] = ([
+
+        if verify:
+            self._assumptions["_minimum"] = ([
+                    Assumption(
+                        property=IsScalar(),
+                        translation=ToScalar()
+                    )
+                ]) 
+
+            self._assumptions["_maximum"] = ([
                 Assumption(
                     property=IsScalar(),
                     translation=ToScalar()
                 )
-            ]) 
+            ])
 
-        self._assumptions["_maximum"] = ([
-            Assumption(
-                property=IsScalar(),
-                translation=ToScalar()
-            )
-        ])
-
-        self._assumptions["_icontains"] = ([
-            Assumption(
-                property=IsScalar(),
-                translation=ToScalar()
-            )
-        ])
+            self._assumptions["_icontains"] = ([
+                Assumption(
+                    property=IsScalar(),
+                    translation=ToScalar()
+                )
+            ])
 
         self._logger = logging.getLogger(__name__)
         self._context = context

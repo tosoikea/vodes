@@ -4,7 +4,7 @@ import sys
 sys.path.append('../vodes')
 #
  
-from vodes.error.analysis import IntervalAnalysis as IA, TaylorAnalysis as TA
+from vodes.error.roundoff_analysis import IntervalAnalysis as IA, TaylorAnalysis as TA
 from vodes.symbolic.expressions.nthroot import NthRoot
 
 from pymbolic import var

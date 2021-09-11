@@ -130,17 +130,13 @@ class AnalysisSolution(Solution):
                 res = bexpr.expr.subs(sym,Float(err,precision)).evalf(precision)
             else:
                 raise ValueError("Encountered too many free variables.")
-
-
-            # TODO : REMOVE
-            if prec == 16:
-                print(f'16 : {res}')
-
+                
             return res
 
 def show(solutions:List[Solution],min_prec:int=11,max_prec:int=53):
+    """Function for visualizing the evaluated bounds"""
     from matplotlib import pyplot
-    assert max_prec > min_prec
+    assert max_prec >= min_prec
     
     xs = range(min_prec,max_prec+1)
 
@@ -155,3 +151,27 @@ def show(solutions:List[Solution],min_prec:int=11,max_prec:int=53):
     pyplot.grid(True)
     pyplot.legend()
     pyplot.show()
+
+def export(file:str,solutions:List[Solution],min_prec:int=11,max_prec:int=53):
+    """Function for exporting the evaluated bounds to a file"""
+    import csv
+    
+    assert max_prec >= min_prec
+    with open(file, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # (1). Write Header
+        header=["precision"]
+        header.extend([sol.name for sol in solutions])
+
+        writer.writerow(header)
+
+        # (2). Calculate and write solutions
+        xs = range(min_prec,max_prec+1)
+
+        for x in xs:
+            ys = [x]
+            for sol in solutions:
+                ys.append(sol.error(prec=x))
+
+            writer.writerow(ys)

@@ -1,0 +1,14 @@
+
+# 1.) p := sqrt(x+1) - sqrt(x)
+Variables
+  real x in [127.7, 127.7];
+
+Expressions
+  r rnd64= sqrt(x+1) - sqrt(x);
+
+# 2.) p := 1 / (sqrt(x+1) + sqrt(x))
+Variables
+  real x in [127.7, 127.7];
+
+Expressions
+  r rnd16= 1 / (sqrt(x+1) + sqrt(x));

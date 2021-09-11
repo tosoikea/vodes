@@ -1,0 +1,16 @@
+# 1.) x := sqrt(p²+q) - p
+Variables
+  real p in [121.3, 121.3];
+  real q in [0.99, 0.99];
+
+Expressions
+  r rnd16= sqrt(p*p + q) - p;
+
+
+# 2.) x:= q / ( sqrt(p²+q)+p )
+Variables
+  real p in [121.3, 121.3];
+  real q in [0.99, 0.99];
+
+Expressions
+  r rnd16= q / (sqrt(p*p + q) + p);

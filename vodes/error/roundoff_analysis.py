@@ -139,9 +139,11 @@ class TaylorAnalysis(RoundoffAnalysis):
 
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         from vodes.symbolic.mapper.extended_substitution_mapper import substitute
-        from vodes.symbolic.mapper.comparison_evaluator import evaluate
+        from vodes.symbolic.mapper.scalar_evaluator import evaluate
         from vodes.error.mapper import TaylorMapper, expand_taylor_terms
         import copy
+
+        eps = MachineError(min_precision=min_precision,max_precision=max_precision)
 
         self.__mapper_instance = TaylorMapper(
             context=copy.deepcopy(context),
@@ -151,26 +153,25 @@ class TaylorAnalysis(RoundoffAnalysis):
             max_exponent=max_exponent
         )
         
-        (_, error, _) = expand_taylor_terms(
+        (_, errors) = expand_taylor_terms(
                 self.__mapper_instance(self._problem),
                 min_prec=min_precision,
                 max_prec=max_precision,
-                abs=True
+                abs=True,
+                separated=True
             )
 
-        sym_context = {}
-        for var in context:
-            sym_context[var] = ExactPymbolicToSympyMapper()(context[var])
+        _abs_error = 0
+        _sym_context = copy.deepcopy(context)
+        _sym_context[eps.name] = Interval(-eps.bound.end,eps.bound.end)
 
-        sym_error = ExactPymbolicToSympyMapper()(error)
-        self._logger.info(f"Determined symbolic error boundary {sym_error}")
+        for (error,epsilon) in errors:
+            _abs_error += evaluate(Abs(error),context=_sym_context)[0].expr * epsilon
         
-        self._absolute = [
+        self._absolute = [ 
             BoundedExpression(
-                expression=ExactSympyToPymbolicMapper()(sym_error.subs(
-                    sym_context
-                )),
-                boundary=MachineError(min_precision=min_precision,max_precision=max_precision).bound
+                expression=_abs_error,
+                boundary=eps.bound
             )
         ]
         self._logger.info(f"Determined absolute error {list(map(str,self._absolute))}")

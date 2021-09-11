@@ -5,7 +5,7 @@ sys.path.append('../vodes')
 #
  
 from vodes.symbolic.expressions.primitives import Subtraction
-from vodes.error.analysis import IntervalAnalysis as IA, TaylorAnalysis as TA
+from vodes.error.roundoff_analysis import IntervalAnalysis as IA, TaylorAnalysis as TA
 
 from vodes.error.utils import PseudoExactSolution, show, AnalysisSolution
 from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
