@@ -122,14 +122,21 @@ class AnalysisSolution(Solution):
         for bexpr in self.bexprs:
             if not bexpr.bound.contains(err):
                 continue
-            
+
             if len(bexpr.expr.free_symbols) == 0:
-                return bexpr.expr.evalf(precision)
+                res = bexpr.expr.evalf(precision)
             elif len(bexpr.expr.free_symbols) == 1:
                 sym = list(bexpr.expr.free_symbols)[0]
-                return bexpr.expr.subs(sym,Float(err,precision)).evalf(precision)
+                res = bexpr.expr.subs(sym,Float(err,precision)).evalf(precision)
             else:
                 raise ValueError("Encountered too many free variables.")
+
+
+            # TODO : REMOVE
+            if prec == 16:
+                print(f'16 : {res}')
+
+            return res
 
 def show(solutions:List[Solution],min_prec:int=11,max_prec:int=53):
     from matplotlib import pyplot

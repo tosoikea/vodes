@@ -5,7 +5,7 @@ from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympy
 from vodes.symbolic.expressions.nthroot import NthRoot
 from vodes.symbolic.expressions.primitives import Subtraction
 from vodes.symbolic.expressions.trigonometric import sin, cos
-from vodes.symbolic.expressions.bounded import MachineError, SmallestMachineNumber
+from vodes.symbolic.expressions.bounded import DummyVariable, MachineError, SmallestMachineNumber
 from vodes.symbolic.expressions.interval import Interval
 
 from pymbolic.mapper import RecursiveMapper
@@ -168,209 +168,387 @@ class IntervalMapper(ErrorMapper):
         raise NotImplementedError()
 
 class TaylorMapper(ErrorMapper):
-    def __init__(self,n:int,context:dict,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
+    def __init__(self,context:dict,min_precision:int,max_precision:int,min_exponent:int,max_exponent:int):
         from pymbolic.primitives import Variable
         from vodes.symbolic.mapper.taylor_evaluator import TaylorEvaluator
         
         super().__init__(context=context,min_precision=min_precision,max_precision=max_precision,min_exponent=min_exponent,max_exponent=max_exponent)
-        
-        self.err = MachineError(min_precision=min_precision, max_precision=max_precision)
 
         self._logger = logging.getLogger(__name__)
 
         ## Approximations
-        assert n > 0
-        self.__n = n
-        self.__evaluate = lambda expr: TaylorEvaluator(context=self.context,symbol=self.err)(expr)
 
+    ###
+    # TAYLOR FORM INTERFACE
+    ###
+    def __compact(self, expr):
+        # TODO : Provide proper compaction within this framework or implement it within pymbolic
+        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper, ExactSympyToPymbolicMapper
+        
+        return ExactSympyToPymbolicMapper()(
+            ExactPymbolicToSympyMapper()(
+                expr
+            ).doit()
+        )
 
-    def round(self, te:tuple):
+    def _bound(self,expr):
+        import copy
+        from vodes.symbolic.expressions.absolute import Abs
+        from vodes.symbolic.mapper.scalar_evaluator import evaluate
+        ## TODO : Improve the performance of the symbolic interval evaluator to allow usage within the bounding process
+        ##        This in turn allows for the machine epsilon variables to be kept and allows for better approximation over ranges of precisions
+        _context = copy.deepcopy(self.context)
+        _context[self.eps.name] = Interval(self.eps.bound.start,self.eps.bound.end)
+
+        res = evaluate(
+            Abs(expr),
+            context=_context
+        )
+
+        if len(res) > 1:
+            raise ValueError("Unexpected divergence of expressions during bounding")
+
+        return res[0].expr
+
+    def _tadd(self, sf:tuple, tf:tuple):
+        """Computes the addition of two taylor forms"""
+        (s,(b1,b2)) = sf
+        (t,(c1,c2)) = tf
+
+        s_k = len(b1)
+
+        op_f = self.__compact(s + t)
+
+        op_c1 = b1
+        op_c1.extend(c1)
+
+        op_c2 = [
+            [
+                0 for _ in range(len(op_c1))
+            ] 
+            for _ in range(len(op_c1))
+        ]
+
+        self._logger.debug(f'{s};{list(map(str,b1))};{[list(map(str,cs)) for cs in b2]}')
+        self._logger.debug(f'{t};{list(map(str,c1))};{[list(map(str,cs)) for cs in c2]}')
+
+        for i in range(len(op_c2)):
+            for j in range(len(op_c2)):
+
+                if i < s_k and j < s_k:
+                    op_c2[i][j] = b2[i][j]
+                elif i >= s_k and j >= s_k:
+                    op_c2[i][j] = c2[i - s_k][j - s_k]
+
+        # Ensure correctness
+        assert len(op_c2[-1]) == len(op_c2[0]) == len(op_c1)
+        return (op_f, (op_c1,op_c2))
+
+    def _tsub(self, sf:tuple, tf:tuple):
+        """Computes the subtraction of two taylor forms"""
+        
+        (s,(b1,b2)) = sf
+        (t,(c1,c2)) = tf
+
+        s_k = len(b1)
+
+        op_f = self.__compact(s - t)
+
+        op_c1 = b1
+        op_c1.extend([-c for c in c1])
+
+        op_c2 = [
+            [
+                0 for _ in range(len(op_c1))
+            ] 
+            for _ in range(len(op_c1))
+        ]
+
+        for i in range(len(op_c2)):
+            for j in range(len(op_c2)):
+
+                if i < s_k and j < s_k:
+                    op_c2[i][j] = b2[i][j]
+                elif i >= s_k and j >= s_k:
+                    op_c2[i][j] = -c2[i - s_k][j - s_k]
+
+        # Ensure correctness
+        assert len(op_c2[-1]) == len(op_c2[0]) == len(op_c1)
+        return (op_f, (op_c1,op_c2))
+
+    def _tmul(self, sf:tuple, tf:tuple):
+        """Computes the multiplication of two taylor forms"""
+        from vodes.symbolic.expressions.absolute import Abs
+        from vodes.symbolic.mapper.comparison_evaluator import evaluate
+
+        (s,(b1,b2)) = sf
+        (t,(c1,c2)) = tf
+
+        s_k = len(b1)
+        t_k = len(c1)
+        c_k = s_k + t_k
+
+        mul_f = self.__compact(s * t)
+
+        # (1). Extend first order 
+        mul_c1 = [0 for _ in range(s_k + t_k)]
+        for i in range(c_k):
+            if i < s_k:
+                mul_c1[i] = self.__compact(t * b1[i])
+            else:
+                mul_c1[i] = self.__compact(s * c1[i - s_k])
+
+        # (2). Extend second order
+        mul_c2 = [
+            [
+                0 for _ in range(c_k)
+            ] 
+            for _ in range(c_k)
+        ]
+
+        for i in range(c_k):
+            for j in range(c_k):
+
+                if i < s_k:
+                    if j < s_k:
+                        mul_c2[i][j] = self.__compact(t * b2[i][j])
+                    else:
+                        mul_c2[i][j] = self.__compact(b1[i] * c1[j - s_k])
+                else:
+                    if j < s_k:
+                        mul_c2[i][j] = self.__compact(c1[i - s_k] * b1[j])
+                    else:
+                        mul_c2[i][j] = self.__compact(s * c2[i - s_k][j - s_k])
+
+        # (3). Bound Remainder
+        _em1 = 0
+        _em2 = 0
+        _em3 = 0
+
+        for i in range(s_k):
+            # M1
+            for m in range(t_k):
+                for g in range(t_k):
+                    _em1 += Abs(b1[i] * c2[m][g])
+
+            for j in range(s_k):
+                for m in range(t_k):
+                    # M2
+                    _em1 += Abs(b2[i][j] * c1[m])
+
+                    # M3
+                    for g in range(t_k):
+                        _em3 += Abs(b2[i][j] * c2[m][g])
+
+        m1 = self._bound(_em1 + _em2)
+        m3 = self._bound(_em3)
+
+        # (4). Add with remainder form
+        (op_f,(op_c1,op_c2)) = self._tadd(
+            (mul_f,(mul_c1,mul_c2)),
+            (0,([
+                    self.__compact(
+                        Power(self.eps,2) * m1 + Power(self.eps,3) * m3
+                    )
+                ],[[0]]))
+        )        
+        
+        self._logger.debug(f'-> {op_f};{list(map(str,op_c1))};{[list(map(str,cs)) for cs in op_c2]}')
+        return (op_f,(op_c1,op_c2))
+
+    def _tround(self, te:tuple):
+        """Computes the taylor form for the rounding of an existing taylor form"""
         from vodes.symbolic.expressions.absolute import Abs
         
-        assert len(te) == 3
-        (f,ts,r) = te
+        assert len(te) == 2
+        (f,(c1,c2)) = te
 
-        self._logger.debug(f'Rounding : {f};{[[str(t) for t in ts]for ts in ts]};{r}')
-        # ts = [ T_1, ..., T_n ]
-        # r = R_n \in \mathbb{M}
-        assert len(ts) == self.__n
+        self._logger.debug(f'Rounding : {f};{list(map(str,c1))};{[list(map(str,cs)) for cs in c2]}')
+
+        # ts : [C_0,C_1]
         assert not (f is None)
 
         # ROUND : (f + ts) * (1+e)
+
+        # (1). Bound remainder
+        m = self._bound(
+            sum(
+                [sum([Abs(c) for c in cs]) for cs in c2]
+            ),
+        )
+
+        # (2). Append e_{k+1} for function
+        c2.append([])
+        for i in range(len(c2) - 1):
+            c2[i].append(c1[i])
+            c2[-1].append(c1[i])
+
+        c2[-1].append(0)
+        c1.append(f)
+
+        # Ensure correctness
+        assert len(c2[-1]) == len(c2[0]) == len(c1)
+
+        # (3). Add with remainder form
+        (op_f,(op_c1,op_c2)) = self._tadd(
+            (f,(c1,c2)),
+            (0,([
+                self.__compact(Power(self.eps,2) * m)
+                ],[[0]]))
+        )
+
+        self._logger.debug(f'-> {op_f};{list(map(str,op_c1))};{[list(map(str,cs)) for cs in op_c2]}')
+        return (op_f,(op_c1,op_c2))
+
+    def _tfunc(self, te:tuple, g, g_1, g_2, g_3):
+        from pymbolic.primitives import Quotient
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
+        from vodes.symbolic.expressions.absolute import Abs
+
+        (t,(c1,c2)) = te
+        self._logger.debug(f'Applying {g} to {t};{list(map(str,c1))};{[list(map(str,cs)) for cs in c2]}')
+
+        t_k = len(c1)
+
+        g_f = self.__compact(substitute(g,{'x':t}))
+
+        # (1). Bound remainder
+        _em0 = sum([Abs(c) for c in c1])
+        _em1 = sum([
+            sum([Abs(c2[i][j] + Abs(c2[j][i])) for j in range(t_k)]) for i in range(t_k)
+        ])
+
+        (_,_,h_t) = expand_taylor_terms(te,min_prec=self.min_precision,max_prec=self.max_precision,abs=False)
+        _em2 = substitute(g_2,{'x':h_t})
+        _em3 = substitute(g_3,{'x':h_t})
         
-        # (1) Append new expansion terms
-        for i in range(self.__n - 1,-1,-1):
-            # We append, as (TS_i * e^i * e)^(i+1)(0) = TS_i
-            exprs = [f] if i == 0 else ts[i-1]
+        m0 = self._bound(_em0)
+        m1 = self._bound(_em1)
+        m2 = self._bound(_em2)
+        m3 = self._bound(_em3)
 
-            ts[i].extend(
-                exprs
+        m_a = 2 * t_k * m1 * m2
+        m_b = t_k**2 * m0 * m3
+        m_c = t_k**2 * m1 * m3
+
+        # (2). Extend first order 
+        for i in range(t_k):
+            c1[i] = self.__compact(substitute(g_1,{'x':t}) * c1[i])
+
+        # (3). Extend second order
+        for i in range(t_k):
+            for j in range(t_k):
+                c2[i][j] = self.__compact(substitute(g_2,{'x':t}) * c1[i] + substitute(g_1,{'x':t}) * (c2[i][j] + c2[j][i]))
+
+        # (4). Add with remainder form
+        (op_f,(op_c1,op_c2)) = self._tadd(
+            (g_f,(c1,c2)),
+            (0,((
+                [
+                    # 1/6 * (e^2M_a + e^2M_b + e^3M_c)
+                    self.__compact(
+                        Quotient(1,6) * 
+                            (Power(self.eps,2) * m_a 
+                                + Power(self.eps,2) * m_b 
+                                + Power(self.eps,3) * m_c)
+                    )
+                ]
+            ),[[0]]))
+        )
+
+        self._logger.debug(f'-> {op_f};{list(map(str,op_c1))};{[list(map(str,cs)) for cs in op_c2]}')
+        return (op_f,(op_c1,op_c2))
+        
+    def _unary_operations(self, tf:tuple, g):
+        from vodes.symbolic.mapper.extended_differentiation_mapper import differentiate
+        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
+
+        # (1) Determine derivatives
+        g_1 = differentiate(g,'x')
+        g_2 = differentiate(g_1,'x')
+        g_3 = differentiate(g_2,'x')
+
+        return self._tround(
+            self._tfunc(
+                tf,
+                g,
+                g_1,
+                g_2,
+                g_3
             )
+        )
 
-        # (2) TODO :Remainder via IntervalArithmetic, disable rigorousity 
-        r += 0
+    ###
+    # UTILITY FUNCTIONS
+    ###
+    def is_power_two(self, expr):
+        #TODO : Negative exponents e.g. x=2^-5?
 
-        self._logger.debug(f'-> {f};{[[str(t) for t in ts]for ts in ts]};{r}')
-        return (f,ts,r)
+        if isinstance(expr,int):
+            #is power of two? (src : http://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2)
+            v = abs(expr)
+            return v and not(v & (v-1))
+        else:
+            return False
 
+    ###
+    # EXPRESSION MAPPING
+    ###
     def map_variable(self, expr):
-        # TA(x) = x + 0 + .... + 0
-        ts = [ [] for _ in range(0,self.__n) ]
+        # TA(x) = x
+        ts = ([],[])
 
-        return self.round(
-            (expr,ts,0)
+        return self._tround(
+            (expr,ts)
         )
 
     def map_constant(self, expr):
-        # TA(c) = c + 0 + .... + 0
-        ts = [ [] for _ in range(0,self.__n) ]
+        # Improved error model
+        b = (expr,([],[]))
 
-        return self.round(
-            (expr, ts, 0)
-        )
+        if self.is_power_two(expr):
+            return b
+        else:
+            return self._tround(
+                b
+            )
 
     def map_sum(self, expr):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts,lr) = self.rec(expr.children[0])
-        (fr,rts,rr) = self.rec(expr.children[1])
-
-        # TA( (F_0 + TS_0) + (F_1 + TS_1) ) = (F_0 + F_1) + (ts_00 + ts_10) + ... + (ts_0n + ts_1n)
-        op_ts = [ [] for _ in range(0,self.__n) ]
-        for i in range(0, self.__n):
-            op_ts[i].extend(lts[i])
-            op_ts[i].extend(rts[i])
-
-        op_f = fl + fr
-        op_r = lr + rr
-
-        self._logger.debug(f'{expr} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
-
-        res = self.round(
-            (op_f, op_ts, op_r)
+        return self._tround(
+            self._tadd(
+                self.rec(expr.children[0]),
+                self.rec(expr.children[1])
+            )
         )
-
-        return res
-
+        
     def map_sub(self, expr):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts,lr) = self.rec(expr.children[0])
-        (fr,rts,rr) = self.rec(expr.children[1])
-
-        # TA( (F_0 + TS_0) - (F_1 + TS_1) ) = (F_0 - F_1) + (ts_00 - ts_10) + ... + (ts_0n - ts_1n)
-        op_ts = [ [] for _ in range(0,self.__n) ]
-        for i in range(0, self.__n):
-            op_ts[i].extend(lts[i])
-            op_ts[i].extend([
-                -rt for rt in rts[i]
-            ])
-
-        op_f = fl - fr
-        op_r = lr - rr
-
-        self._logger.debug(f'{expr} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
-
-        res = self.round(
-            (op_f, op_ts, op_r)
+        return self._tround(
+            self._tsub(
+                self.rec(expr.children[0]),
+                self.rec(expr.children[1])
+            )
         )
-
-        return res
 
     def map_product(self, expr):
         from vodes.symbolic.mapper.extended_evaluation_mapper import evaluate
         assert len(expr.children) == 2
 
-        (fl,lts,lr) = self.rec(expr.children[0])
-        (fr,rts,rr) = self.rec(expr.children[1])
-
-        # TA( (F_0 + TS_0) x (F_1 + TS_1) ) = (F_0 x F_1) + (ts_00F_0 + ts_10F_1) + ...
-
-        # t1 = { { f_0 * t[i][j], t[i][j] \in TS_i }, TS_i \in TS_1 }
-        t1 = [ [ fl * t for t in ts ] for ts in rts ]
-
-        # t2 = { { f_1 * t[i][j], t[i][j] \in TS_i }, TS_i \in TS_0 }
-        t2 = [ [ fr * t for t in ts ] for ts in lts ]
-
-        # t3 = { { ts[i][a] * ts[j][b], i + j = z - 1, ts[i][a] \in TS_0, ts[j][b] \in TS_1}, z \in {0,...,n - 1} }
-        t3 = [ [  ] for _ in range(self.__n)]
-        
-        for z in range(self.__n):
-            # 0 .. z-1
-            for i in range(z):
-                # z -1 .. 0
-                j = (z - 1) - i
-
-                for lt in lts[i]:
-                    for rt in rts[j]:
-                        t3[z].append(lt * rt)
-
-        # t4 = Remainder
-        t4 = 0 #TODO
-
-        op_r = t4
-        op_f = fl * fr
-        op_ts = t1
-
-        for i in range(0, self.__n):
-            op_ts[i].extend(t2[i])
-            op_ts[i].extend(t3[i])
-
-        return self.round(
-            (op_f, op_ts, op_r)
+        return self._tround(
+            self._tmul(
+                self.rec(expr.children[0]),
+                self.rec(expr.children[1])
+            )
         )
-        
-    def map_quotient(self, expr):
-        from pymbolic.primitives import Quotient, Variable, Product
-
-        # INV
-        if isinstance(expr.numerator,int) and expr.numerator == 1:
-            return self._unary_operations(
-                outer=Quotient(1,Variable('x')),
-                inner=self.rec(expr.denominator)
-            )
-        else:
-            return self.rec(
-                Product((expr.numerator,Quotient(1,expr.denominator)))
-            )
 
     def map_interval(self, expr):
         raise NotImplementedError()
     
-    ##
-    # UNARY FUNCTIONS
-    ##
-    def _unary_operations(self, outer, inner:tuple):
-        from vodes.symbolic.mapper.extended_differentiation_mapper import differentiate
-        from vodes.symbolic.mapper.extended_substitution_mapper import substitute
-        from vodes.symbolic.expressions.absolute import Abs
-
-        from vodes.symbolic.mapper.interop import ExactPymbolicToSympyMapper
-
-        (f,ts,r) = inner
-
-        # (1) Determine F
-        op_f = substitute(outer,{'x' : f})
-
-        # (2) Determine Taylor Expansion Terms
-        op_ts = [ [] for _ in range(0,self.__n) ]
-        derivative = outer
-        for i in range(self.__n):
-            derivative = differentiate(derivative,'x')
-            op_ts[i] = [t * substitute(derivative,{'x' : f}) for t in ts[i]]
-            
-
-        # TODO : (3) Determine Remainder
-        op_r = 0
-
-        self._logger.debug(f'{outer};{f};{[[str(t) for t in ts]for ts in ts]};{r} -> {op_f};{[[str(t) for t in ts]for ts in op_ts]};{op_r}')
-        
-        return self.round(
-            (op_f, op_ts, op_r)
-        )
-
     def map_power(self, expr):
         from pymbolic.primitives import Power, Variable
 
@@ -378,9 +556,26 @@ class TaylorMapper(ErrorMapper):
             raise ValueError(f"Exponent {expr.exponent} is not supported.")
             
         return self._unary_operations(
-            outer=Power(Variable('x'),expr.exponent),
-            inner=self.rec(expr.base)
+            tf  =   self.rec(expr.base),
+            g   =   Power(Variable('x'),expr.exponent)
         )
+
+    ##
+    # UNARY EXPRESSIONS
+    ##
+    def map_quotient(self, expr):
+        from pymbolic.primitives import Quotient, Variable, Product
+
+        # INV
+        if isinstance(expr.numerator,int) and expr.numerator == 1:
+            return self._unary_operations(
+                tf  =   self.rec(expr.denominator),
+                g   =   Quotient(1,Variable('x'))
+            )
+        else:
+            return self.rec(
+                Product((expr.numerator,Quotient(1,expr.denominator)))
+            )
 
     def map_nthroot(self, expr):
         from pymbolic.primitives import Variable
@@ -390,17 +585,17 @@ class TaylorMapper(ErrorMapper):
             raise ValueError(f"NthRoot {expr.n} is not supported.")
             
         return self._unary_operations(
-            outer=NthRoot(Variable('x'),expr.n),
-            inner=self.rec(expr.expr)
+            tf  =   self.rec(expr.expr),
+            g   =   NthRoot(Variable('x'),expr.n)
         )
 
     def map_sin(self, expr):
         from pymbolic.primitives import Variable
         from vodes.symbolic.expressions.trigonometric import sin
-            
+
         return self._unary_operations(
-            outer=sin(Variable('x')),
-            inner=self.rec(expr.expr)
+            tf  =   self.rec(expr.expr),
+            g   =   sin(Variable('x'))
         )
 
     def map_cos(self, expr):
@@ -408,35 +603,43 @@ class TaylorMapper(ErrorMapper):
         from vodes.symbolic.expressions.trigonometric import cos
             
         return self._unary_operations(
-            outer=cos(Variable('x')),
-            inner=self.rec(expr.expr)
+            tf  =   self.rec(expr.expr),
+            g   =   cos(Variable('x'))
         )
 
-def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
-    from functools import reduce
-    assert len(te) == 3
 
+def expand_taylor_terms(te:tuple,min_prec:int,max_prec:int,abs:bool=False):
+    """Converts the taylor form to its written out form"""
+    from vodes.symbolic.expressions.absolute import Abs
+    
     err = MachineError(min_precision=min_prec,max_precision=max_prec)
 
-    inner = lambda x,i: x * Interval(-err, +err) ** (i+1)
-    outer = lambda i : 1
+    assert len(te) == 2
+    (f,(c1,c2)) = te
+
+    inner = lambda x,i: x * Interval(-err, err) ** i
+    outer = lambda x,i: x
 
     if abs:
-        inner = lambda x,i: x
-        outer = lambda i: err**(i+1)
-    
-    (f,ts,r) = te
+        inner = lambda x,i: Abs(x)
+        outer = lambda x,i: x * err**i
 
     _error = 0
+    
+    # (1) Order one
+    _error += outer(
+        sum([
+            inner(c,1) for c in c1
+        ]),1
+    )
 
-    for i in range(len(ts)):
-        _error += sum(
-            [
-                inner(t,i) for t in ts[i]
-            ]
-        ) * outer(i)
+    # (2) Order two
+    _error_two = 0
+    for i in range(len(c1)):
+        # (i,j) (j,i) have same error variables
+        for j in range(i,len(c1)):
+            _error_two += inner(c2[i][j] + c2[j][i],2)
+    
+    _error += outer(_error_two,2)
 
-    # Last term consists of CONSTANT remainder
-    # Contextually  e^(n+1) * M / e^(n+1) == M
-    _error += r
     return (f, _error, f + _error)

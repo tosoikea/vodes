@@ -169,26 +169,19 @@ class IntervalEvaluator(ABC, RecursiveMapper):
         return res
 
     def map_interval(self, expr:Interval) -> List[BoundedExpression]:
-        from vodes.symbolic.mapper.bounded_mapper import BoundedMapper
+        from vodes.symbolic.utils import merge
 
-        # Simply maps all expressions to boundedexpressions
-        l = BoundedMapper(context=self._context, symbol=self._symbol)(expr.low)
-        r = BoundedMapper(context=self._context, symbol=self._symbol)(expr.up)
-
-        lexpr = l
-        rexpr = r
-
-        if isinstance(l, BoundedExpression):
-            lexpr = l.expr
-
-        if isinstance(r, BoundedExpression):
-            rexpr = r.expr
+        lower = self.rec(expr.low)
+        upper = self.rec(expr.up)
 
         res = [
             BoundedExpression(
-                expression=Interval(lower=lexpr, upper=rexpr),
-                boundary=self._symbol.bound
-            )
+                expression=Interval(
+                    lower=left.low,
+                    upper=right.up
+                ),
+                boundary=boundary
+            ) for ((left,right),boundary) in merge(lower,upper)
         ]
 
         self._logger.info(f'(INTERVAL) {expr} -> {list(map(str,res))}')
@@ -342,7 +335,6 @@ class IntervalEvaluator(ABC, RecursiveMapper):
         if isinstance(l, BoundedExpression):
             d = d.intersect(l.bound)
             expr = l.expr
-        # May result from BoundedMapper
         elif isinstance(l, Variable) or self.is_constant(l):
             expr = Interval(l)
 

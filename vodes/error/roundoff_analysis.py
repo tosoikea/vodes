@@ -18,7 +18,7 @@ from pymbolic.primitives import Expression, Power
 
 # Mapper
 
-class Analysis(ABC):
+class RoundoffAnalysis(ABC):
     """Superclass for the concise implementations of roundoff error analysis for a symbolic problem.
 
     Args:
@@ -74,7 +74,7 @@ class Analysis(ABC):
             max_prec=self._precision[1]
         )
 
-class IntervalAnalysis(Analysis):
+class IntervalAnalysis(RoundoffAnalysis):
     """Class implementing roundoff error analysis on the basis of interval analysis.
 
     Args:
@@ -120,7 +120,7 @@ class IntervalAnalysis(Analysis):
 
         return self._absolute
 
-class TaylorAnalysis(Analysis):
+class TaylorAnalysis(RoundoffAnalysis):
     """Class implementing roundoff error analysis on the basis of taylor expansions
     
     Args:
@@ -135,8 +135,7 @@ class TaylorAnalysis(Analysis):
         super().__init__(problem, opt)
 
     def parse(self, opt:dict):
-        self.n = opt.setdefault("n", 1)
-        self._logger.info(f"Requested taylor order is {self.n}")
+        return
 
     def absolute(self, context:dict, min_precision:int, max_precision:int, min_exponent:int, max_exponent:int) -> list:
         from vodes.symbolic.mapper.extended_substitution_mapper import substitute
@@ -145,7 +144,6 @@ class TaylorAnalysis(Analysis):
         import copy
 
         self.__mapper_instance = TaylorMapper(
-            n=self.n,
             context=copy.deepcopy(context),
             min_precision=min_precision,
             max_precision=max_precision,
@@ -160,10 +158,20 @@ class TaylorAnalysis(Analysis):
                 abs=True
             )
 
-        self._absolute = evaluate(Abs(substitute(
-            error,
-            context
-        )),min_precision,max_precision)
+        sym_context = {}
+        for var in context:
+            sym_context[var] = ExactPymbolicToSympyMapper()(context[var])
 
+        sym_error = ExactPymbolicToSympyMapper()(error)
+        self._logger.info(f"Determined symbolic error boundary {sym_error}")
+        
+        self._absolute = [
+            BoundedExpression(
+                expression=ExactSympyToPymbolicMapper()(sym_error.subs(
+                    sym_context
+                )),
+                boundary=MachineError(min_precision=min_precision,max_precision=max_precision).bound
+            )
+        ]
         self._logger.info(f"Determined absolute error {list(map(str,self._absolute))}")
         return self._absolute

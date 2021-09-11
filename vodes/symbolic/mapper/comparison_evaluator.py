@@ -8,7 +8,7 @@ from vodes.symbolic.assumption import Assumption
 
 # Custom Expression library
 from vodes.symbolic.expressions.interval import Interval
-from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain, MachineError
+from vodes.symbolic.expressions.bounded import BoundedVariable, BoundedExpression, Domain, DummyVariable, MachineError
 from vodes.symbolic.expressions.trigonometric import sin,cos
 from vodes.symbolic.expressions.infinity import Infinity, NegativeInfinity
 from vodes.symbolic.utils import compare, le,ge,gt,lt,minimum,maximum
@@ -19,15 +19,15 @@ from vodes.symbolic.mapper.interval_evaluator import IntervalEvaluator
 # Expression Library
 from pymbolic.primitives import Expression, Quotient, Variable, Power
 
-def evaluate(expression, min_prec:int, max_prec:int, float:bool=False, context=None):
+def evaluate(expression, symbol:BoundedVariable, float:bool=False, context=None):
     if context is None:
         context = {}
-    res = ComparisonEvaluator(context,MachineError(min_prec,max_prec))(expression)
+    res = ComparisonEvaluator(context,symbol)(expression)
 
     # Two iterations of solver, if symbolic values are used for evaluation.
     # This allows to push the floating calculations further up.
     if float:
-        return evaluate(res, min_prec, max_prec, float, context=context)
+        return evaluate(res, symbol, float, context=context)
     else:
         return res
 

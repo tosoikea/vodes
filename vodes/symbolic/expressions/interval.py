@@ -17,7 +17,7 @@ class Interval(ExtendedExpression):
         __lower: The lower boundary of the interval. Use property low!
         __upper: The upper boundary of the interval. Use property up!
     """
-    init_arg_names = ("lower", "upper",)
+    init_arg_names = ("_lower", "_upper",)
 
     def __init__(self, lower, upper=None):
         assert(not lower is None)
@@ -26,8 +26,8 @@ class Interval(ExtendedExpression):
         if upper is None:
             upper = lower
 
-        self.__lower = lower
-        self.__upper = upper
+        self._lower = lower
+        self._upper = upper
 
     def __getinitargs__(self):
         return self.low, self.up
@@ -35,12 +35,12 @@ class Interval(ExtendedExpression):
     @property
     def low(self):
         """Get or set the lower boundary of the interval"""
-        return self.__lower
+        return self._lower
 
     @property
     def up(self):
         """Get or set the upper boundary of the interval"""
-        return self.__upper
+        return self._upper
 
     def make_stringifier(self, originating_stringifier=None):
         return IntervalStringifyMapper()

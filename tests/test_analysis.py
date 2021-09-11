@@ -30,8 +30,8 @@ def calculate(f,prec):
 
 @pytest.fixture
 def analyses():
-    from vodes.error.analysis import IntervalAnalysis as IA
-    from vodes.error.analysis import TaylorAnalysis as TA
+    from vodes.error.roundoff_analysis import IntervalAnalysis as IA
+    from vodes.error.roundoff_analysis import TaylorAnalysis as TA
     return [
         lambda p : IA(problem=p),
         lambda p : TA(problem=p)
