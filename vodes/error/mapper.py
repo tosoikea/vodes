@@ -362,6 +362,7 @@ class TaylorMapper(ErrorMapper):
         
         assert len(te) == 2
         (f,(c1,c2)) = te
+        t_k = len(c1)
 
         self._logger.debug(f'Rounding : {f};{list(map(str,c1))};{[list(map(str,cs)) for cs in c2]}')
 
@@ -371,6 +372,7 @@ class TaylorMapper(ErrorMapper):
         # ROUND : (f + ts) * (1+e)
 
         # (1). Bound remainder
+        m = 0
         m = self._bound(
             sum(
                 [sum([Abs(c) for c in cs]) for cs in c2]
@@ -378,24 +380,29 @@ class TaylorMapper(ErrorMapper):
         )
 
         # (2). Append e_{k+1} for function
-        c2.append([])
-        for i in range(len(c2) - 1):
-            c2[i].append(c1[i])
-            c2[-1].append(c1[i])
-
-        c2[-1].append(0)
         c1.append(f)
+        c2.append([])
+
+        for i in range(t_k):
+            c2[i].append(c1[i])
+            c2[t_k].append(c1[i])
+
+        c2[t_k].append(0)
 
         # Ensure correctness
         assert len(c2[-1]) == len(c2[0]) == len(c1)
 
-        # (3). Add with remainder form
-        (op_f,(op_c1,op_c2)) = self._tadd(
-            (f,(c1,c2)),
-            (0,([
-                self.__compact(Power(self.eps,2) * m)
-                ],[[0]]))
-        )
+        # (3). Add with remainder form, if needed
+        if m != 0:
+            (op_f,(op_c1,op_c2)) = self._tadd(
+                (f,(c1,c2)),
+                (0,([
+                    self.__compact(Power(self.eps,2) * m)
+                    ],[[0]]))
+            )
+        else:
+            (op_f,(op_c1,op_c2)) = (f,(c1,c2))
+
 
         self._logger.debug(f'-> {op_f};{list(map(str,op_c1))};{[list(map(str,cs)) for cs in op_c2]}')
         return (op_f,(op_c1,op_c2))
@@ -496,10 +503,10 @@ class TaylorMapper(ErrorMapper):
     ###
     def map_variable(self, expr):
         # TA(x) = x
-        ts = ([],[])
+        b = (expr,([],[]))
 
         return self._tround(
-            (expr,ts)
+            b
         )
 
     def map_constant(self, expr):

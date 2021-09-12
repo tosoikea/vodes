@@ -304,7 +304,7 @@ class ExactPymbolicToMathMapper(RecursiveMapper):
         return self.rec(expr.num) / self.rec(expr.den)
 
     def map_power(self, expr):
-        return self.rec(expr.num) ** self.rec(expr.den)
+        return self.rec(expr.base) ** self.rec(expr.exponent)
 
     ###
     # FUNCTIONS
